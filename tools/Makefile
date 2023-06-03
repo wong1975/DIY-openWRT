@@ -141,9 +141,21 @@ else
 endif
 
 ifneq ($(CONFIG_CCACHE)$(CONFIG_SDK),)
-$(foreach tool, $(filter-out zstd zlib xz pkgconf patch ninja meson libressl expat cmake,$(tools-y)), $(eval $(curdir)/$(tool)/compile += $(curdir)/ccache/compile))
-tools-y += ccache
-$(curdir)/ccache/compile := $(curdir)/cmake/compile
+  tools-noccache :=
+  tools-noccache += cmake
+  tools-noccache += expat
+  tools-noccache += libressl
+  tools-noccache += meson
+  tools-noccache += ninja
+  tools-noccache += patch
+  tools-noccache += pkgconf
+  tools-noccache += xz
+  tools-noccache += zlib
+  tools-noccache += zstd
+
+  $(foreach tool, $(filter-out $(tools-noccache),$(tools-y)), $(eval $(curdir)/$(tool)/compile += $(curdir)/ccache/compile))
+  tools-y += ccache
+  $(curdir)/ccache/compile := $(curdir)/cmake/compile
 endif
 
 # in case there is no patch tool on the host we need to make patch tool a
