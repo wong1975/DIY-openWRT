@@ -29,6 +29,9 @@ endif
 ifneq ($(CONFIG_SDK)$(CONFIG_TARGET_INITRAMFS_COMPRESSION_LZO),)
   BUILD_LZO_TOOLS = y
 endif
+ifneq ($(CONFIG_SDK)$(CONFIG_BUILD_HOST_PYTHON),)
+  BUILD_PYTHON = y
+endif
 
 tools-y += autoconf
 tools-y += autoconf-archive
@@ -75,6 +78,7 @@ tools-$(if $(CONFIG_BUILD_ALL_HOST_TOOLS)$(BUILD_ISL),y) += isl
 tools-$(if $(CONFIG_BUILD_ALL_HOST_TOOLS)$(BUILD_LZ4_TOOLS),y) += lz4
 tools-$(if $(CONFIG_BUILD_ALL_HOST_TOOLS)$(BUILD_LZO_TOOLS),y) += lzop
 tools-$(if $(CONFIG_BUILD_ALL_HOST_TOOLS)$(BUILD_TOOLCHAIN),y) += gmp mpc mpfr
+tools-$(if $(CONFIG_BUILD_ALL_HOST_TOOLS)$(BUILD_PYTHON),y) += python3
 tools-$(if $(CONFIG_BUILD_ALL_HOST_TOOLS)$(CONFIG_TARGET_apm821xx)$(CONFIG_TARGET_gemini),y) += genext2fs
 tools-$(if $(CONFIG_BUILD_ALL_HOST_TOOLS)$(CONFIG_TARGET_ath79),y) += lzma-old squashfs3-lzma
 tools-$(if $(CONFIG_BUILD_ALL_HOST_TOOLS)$(CONFIG_TARGET_mxs),y) += elftosb sdimage
@@ -87,7 +91,7 @@ tools-$(if $(CONFIG_BUILD_ALL_HOST_TOOLS)$(CONFIG_USE_MOLD),y) += mold
 
 # builddir dependencies
 $(curdir)/autoconf/compile := $(curdir)/m4/compile
-$(curdir)/automake/compile := $(curdir)/autoconf/compile $(curdir)/pkgconf/compile $(curdir)/xz/compile
+$(curdir)/automake/compile := $(curdir)/autoconf/compile $(curdir)/xz/compile
 $(curdir)/b43-tools/compile := $(curdir)/bison/compile
 $(curdir)/bc/compile := $(curdir)/bison/compile $(curdir)/libtool/compile
 $(curdir)/bison/compile := $(curdir)/flex/compile
@@ -119,14 +123,24 @@ $(curdir)/mold/compile := $(curdir)/cmake/compile $(curdir)/zlib/compile $(curdi
 $(curdir)/mpc/compile := $(curdir)/mpfr/compile $(curdir)/gmp/compile
 $(curdir)/mpfr/compile := $(curdir)/gmp/compile
 $(curdir)/mtd-utils/compile := $(curdir)/libtool/compile $(curdir)/e2fsprogs/compile $(curdir)/zlib/compile
+$(curdir)/ninja/compile := $(curdir)/python3/compile
 $(curdir)/padjffs2/compile := $(curdir)/findutils/compile
 $(curdir)/patchelf/compile := $(curdir)/libtool/compile
-$(curdir)/pkgconf/compile := $(curdir)/meson/compile
+$(curdir)/pkgconf/compile := $(curdir)/automake/compile
+$(curdir)/python3/compile := $(curdir)/e2fsprogs/compile $(curdir)/expat/compile $(curdir)/pkgconf/compile $(curdir)/libressl/compile $(curdir)/lzma/compile $(curdir)/zlib/compile
 $(curdir)/quilt/compile := $(curdir)/autoconf/compile $(curdir)/findutils/compile
 $(curdir)/sdcc/compile := $(curdir)/bison/compile
 $(curdir)/squashfs3-lzma/compile := $(curdir)/lzma-old/compile
 $(curdir)/squashfs4/compile := $(curdir)/xz/compile $(curdir)/zlib/compile
 $(curdir)/zstd/compile := $(curdir)/meson/compile
+
+# downloads that use scripts/dl_github_archive.py
+ifneq ($(CONFIG_BUILD_ALL_HOST_TOOLS)$(BUILD_PYTHON),)
+  $(curdir)/b43-tools/compile += $(curdir)/python3/compile
+  $(curdir)/cbootimage-configs/compile := $(curdir)/python3/compile
+  $(curdir)/kernel2minor/compile := $(curdir)/python3/compile
+  $(curdir)/sdimage/compile := $(curdir)/python3/compile
+endif
 
 ifneq ($(HOST_OS),Linux)
   $(curdir)/coreutils/compile += $(curdir)/automake/compile $(curdir)/bison/compile $(curdir)/gnulib/compile
@@ -136,16 +150,36 @@ endif
 ifeq ($(HOST_OS),Darwin)
   tools-y += bash
 else
-  $(curdir)/dwarves/compile += $(curdir)/elfutils/compile
+  $(curdir)/dwarves/compile += $(curdir)/cmake/compile $(curdir)/elfutils/compile
   $(curdir)/elfutils/compile := $(curdir)/m4/compile $(curdir)/zlib/compile
   tools-$(if $(CONFIG_BUILD_ALL_HOST_TOOLS)$(CONFIG_DWARVES),y) += dwarves
   tools-y += elfutils
 endif
 
 ifneq ($(CONFIG_CCACHE)$(CONFIG_SDK),)
-$(foreach tool, $(filter-out zstd zlib xz pkgconf patch ninja meson libressl expat cmake,$(tools-y)), $(eval $(curdir)/$(tool)/compile += $(curdir)/ccache/compile))
-tools-y += ccache
-$(curdir)/ccache/compile := $(curdir)/cmake/compile
+  tools-noccache :=
+  tools-noccache += autoconf
+  tools-noccache += automake
+  tools-noccache += cmake
+  tools-noccache += e2fsprogs
+  tools-noccache += expat
+  tools-noccache += gnulib
+  tools-noccache += libressl
+  tools-noccache += libtool
+  tools-noccache += lzma
+  tools-noccache += m4
+  tools-noccache += meson
+  tools-noccache += missing-macros
+  tools-noccache += ninja
+  tools-noccache += patch
+  tools-noccache += pkgconf
+  tools-noccache += xz
+  tools-noccache += zlib
+  tools-noccache += zstd
+
+  $(foreach tool, $(filter-out $(tools-noccache),$(tools-y)), $(eval $(curdir)/$(tool)/compile += $(curdir)/ccache/compile))
+  tools-y += ccache
+  $(curdir)/ccache/compile := $(curdir)/cmake/compile
 endif
 
 # in case there is no patch tool on the host we need to make patch tool a
