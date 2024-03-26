@@ -20,6 +20,41 @@ define Build/addpattern
 	-mv "$@.new" "$@"
 endef
 
+define Build/alpha_encimg
+	$(STAGING_DIR_HOST)/bin/alpha_encimg $@ $@.new $(1)
+	mv $@.new $@
+endef
+
+define Build/dlink-alpha-image
+	$(eval mangled_key=$(word 1,$(1)))
+	$(eval mangled_iv=$(word 2,$(1)))
+	let \
+		size="$$(stat -c%s $@)" \
+		pad="(16 - (size % 16))"; \
+		dd bs=$$pad count=1 if=/dev/zero 2>/dev/null >> $@; \
+		printf '%08x' $$size | sed 's/../\\\\x&/g' | xargs echo -ne >> $@; \
+		dd bs=12 count=1 if=/dev/zero 2>/dev/null >> $@
+	$(STAGING_DIR_HOST)/bin/openssl aes-256-cbc -nosalt -nopad \
+		-K $(mangled_key) -iv $(mangled_iv) -in $@ -out $@.aes
+	mv $@.aes $@
+	#
+	# When adding a new D-Link alpha networks device whose
+	# factory.bin needs to be encrypted using this command,
+	# please follow the example below to calculate the mangled
+	# key and iv based on $(SEAMA_SIGNATURE) and the 32B key and
+	# 16B iv found in the GPL sources of the new device.
+	# The mangled key and iv are then hard-coded in the device
+	# stanza; see, e.g., Device/dlink_dap-1720-a1 below.
+	#
+	# python -c 'import sys; s,k,i=sys.argv[1:]; \
+	# 	     X=lambda x: bytes((j+1)^ord(a)^ord(b) \
+	# 	     for j,(a,b) in enumerate(zip(x,9*s))).hex(); \
+	# 	     print(X(k),X(i))' \
+	# 	wapac28_dlink.2015_dap1720 \
+	# 	qBiz6o/1RVQTtJBd3FS7FDbqogE8yoBm \
+	# 	EfDMqWWxHCOhEqgY
+endef
+
 define Build/append-md5sum-bin
 	$(MKHASH) md5 $@ | sed 's/../\\\\x&/g' |\
 		xargs echo -ne >> $@
@@ -1254,15 +1289,16 @@ define Device/dlink_dir-835-a1
 endef
 TARGET_DEVICES += dlink_dir-835-a1
 
-define Device/dlink_dir-842-c
+define Device/dlink_dir-842-cx
   SOC := qca9563
   DEVICE_VENDOR := D-Link
   DEVICE_MODEL := DIR-842
   KERNEL := kernel-bin | append-dtb | relocate-kernel | lzma
   KERNEL_INITRAMFS := $$(KERNEL) | seama
-  IMAGES += factory.bin
   SEAMA_MTDBLOCK := 5
   SEAMA_SIGNATURE := wrgac65_dlink.2015_dir842
+  IMAGE_SIZE := 15680k
+  IMAGES += factory.bin factory2.bin recovery.bin
   # 64 bytes offset:
   # - 28 bytes seama_header
   # - 36 bytes of META data (4-bytes aligned)
@@ -1270,29 +1306,38 @@ define Device/dlink_dir-842-c
 	pad-offset $$$$(BLOCKSIZE) 64 | append-rootfs
   IMAGE/sysupgrade.bin := $$(IMAGE/default) | seama | pad-rootfs | \
 	check-size | append-metadata
-  IMAGE/factory.bin := $$(IMAGE/default) | pad-rootfs -x 64 | seama | \
+  IMAGE/recovery.bin := $$(IMAGE/default) | pad-rootfs -x 64 | seama | \
 	seama-seal | check-size
-  IMAGE_SIZE := 15680k
+  IMAGE/factory.bin := $$(IMAGE/recovery.bin) | \
+	alpha_encimg $$$$(SEAMA_SIGNATURE) \
+	xQYoRZeD726UAbRb846kO7TeNw8eZa6u zufEbNF3kUafxFiE
+  IMAGE/factory2.bin := $$(IMAGE/recovery.bin) | dlink-alpha-image \
+	0e213d0a346a57135a54543727426f4218137a1b33537b49651a511e261c1f60 \
+	0c050220047e7464063303041e665465
 endef
 
 define Device/dlink_dir-842-c1
-  $(Device/dlink_dir-842-c)
+  $(Device/dlink_dir-842-cx)
   DEVICE_VARIANT := C1
   DEVICE_PACKAGES := kmod-ath10k-ct ath10k-firmware-qca9888-ct
 endef
 TARGET_DEVICES += dlink_dir-842-c1
 
 define Device/dlink_dir-842-c2
-  $(Device/dlink_dir-842-c)
+  $(Device/dlink_dir-842-cx)
   DEVICE_VARIANT := C2
   DEVICE_PACKAGES := kmod-usb2 kmod-ath10k-ct ath10k-firmware-qca9888-ct
 endef
 TARGET_DEVICES += dlink_dir-842-c2
 
 define Device/dlink_dir-842-c3
-  $(Device/dlink_dir-842-c)
+  $(Device/dlink_dir-842-cx)
   DEVICE_VARIANT := C3
   DEVICE_PACKAGES := kmod-ath10k-ct ath10k-firmware-qca9888-ct
+  SEAMA_SIGNATURE := $$(SEAMA_SIGNATURE)EU
+  IMAGE/factory2.bin := $$(IMAGE/recovery.bin) | dlink-alpha-image \
+	0e213d0a346a57135a54543727426f4218137a1b33537b496528760e35184836 \
+	0c050220047e7464063303041e665465
 endef
 TARGET_DEVICES += dlink_dir-842-c3
 
@@ -1304,6 +1349,15 @@ define Device/dlink_dir-859-ax
   IMAGE_SIZE := 15872k
   DEVICE_PACKAGES := kmod-usb2 kmod-ath10k-ct-smallbuffers ath10k-firmware-qca988x-ct
   SEAMA_SIGNATURE := wrgac37_dlink.2013gui_dir859
+  IMAGES += factory.bin factory2.bin recovery.bin
+  IMAGE/recovery.bin := $$(IMAGE/default) | pad-rootfs -x 64 | seama | \
+	seama-seal | check-size
+  IMAGE/factory.bin := $$(IMAGE/recovery.bin) | \
+	alpha_encimg $$(SEAMA_SIGNATURE) \
+	KY0H9R2PDL3eu1J4uCVd1CK7BJ7vF1kc qbStAzIRvWeQHz5U
+  IMAGE/factory2.bin := $$(IMAGE/recovery.bin) | dlink-alpha-image \
+	3d29542d5f670207292a510713117714556222054d0a3846296819532c5d1322 \
+	07123711274f79051b3107332e5a0875
 endef
 
 define Device/dlink_dir-859-a1
