@@ -17,6 +17,8 @@ PKG_MIRROR_HASH:=ee0bce167707fe78f68a951b7ee1e0e61a92cae281e0e24eb709857ae849777
 PKG_MAINTAINER:=Jo-Philipp Wich <jo@mein.io>
 PKG_LICENSE:=GPL-2.0
 
+PKG_CONFIG_DEPENDS:=CONFIG_WIFI_SCRIPTS_UCODE
+
 IWINFO_ABI_VERSION:=20230701
 
 include $(INCLUDE_DIR)/package.mk
@@ -60,7 +62,7 @@ define Package/iwinfo
   SECTION:=utils
   CATEGORY:=Utilities
   TITLE:=Generalized Wireless Information utility
-  DEPENDS:=+libiwinfo
+  DEPENDS:=+libiwinfo @!WIFI_SCRIPTS_UCODE
 endef
 
 define Package/iwinfo/description
