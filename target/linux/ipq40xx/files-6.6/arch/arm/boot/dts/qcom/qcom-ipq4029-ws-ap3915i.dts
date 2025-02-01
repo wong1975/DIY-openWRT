@@ -10,6 +10,8 @@
 	compatible = "extreme-networks,ws-ap3915i";
 
 	aliases {
+		// TODO: Verify if the ethernet0 alias is needed
+		ethernet0 = &gmac;
 		led-boot = &led_system_green;
 		led-failsafe = &led_system_amber;
 		led-running = &led_system_green;
@@ -17,16 +19,6 @@
 	};
 
 	soc {
-		rng@22000 {
-			status = "okay";
-		};
-
-		mdio@90000 {
-			status = "okay";
-			pinctrl-0 = <&mdio_pins>;
-			pinctrl-names = "default";
-		};
-
 		tcsr@1949000 {
 			compatible = "qcom,tcsr";
 			reg = <0x1949000 0x100>;
@@ -43,14 +35,6 @@
 			compatible = "qcom,tcsr";
 			reg = <0x1957000 0x100>;
 			qcom,wifi_noc_memtype_m0_m2 = <TCSR_WIFI_NOC_MEMTYPE_M0_M2>;
-		};
-
-		crypto@8e3a000 {
-			status = "okay";
-		};
-
-		watchdog@b017000 {
-			status = "okay";
 		};
 	};
 
@@ -106,6 +90,18 @@
 	};
 };
 
+&watchdog {
+	status = "okay";
+};
+
+&prng {
+	status = "okay";
+};
+
+&crypto {
+	status = "okay";
+};
+
 &blsp_dma {
 	status = "okay";
 };
@@ -120,8 +116,10 @@
 	status = "okay";
 };
 
-&qpic_bam {
+&mdio {
 	status = "okay";
+	pinctrl-0 = <&mdio_pins>;
+	pinctrl-names = "default";
 };
 
 &gmac {

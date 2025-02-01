@@ -9,8 +9,11 @@ let eth_bias = 2.0;
 let debug = 0, do_nothing = 0;
 let disable;
 let cpus;
+let all_cpus;
+let local_flows = 0;
 
-for (let arg in ARGV) {
+while (length(ARGV) > 0) {
+	let arg = shift(ARGV);
 	switch (arg) {
 	case "-d":
 		debug++;
@@ -20,6 +23,12 @@ for (let arg in ARGV) {
 		break;
 	case '0':
 		disable = true;
+		break;
+	case '2':
+		all_cpus = true;
+		break;
+	case '-l':
+		local_flows = +shift(ARGV);
 		break;
 	}
 }
@@ -46,9 +55,20 @@ function set_task_cpu(pid, cpu) {
 		system(`taskset -p -c ${cpu} ${pid}`);
 }
 
-function set_netdev_cpu(dev, cpu) {
-	let queues = glob(`/sys/class/net/${dev}/queues/rx-*/rps_cpus`);
-	let val = sprintf("%x", (1 << int(cpu)));
+function cpu_mask(cpu)
+{
+	let mask;
+	if (cpu < 0)
+		mask = (1 << length(cpus)) - 1;
+	else
+		mask = (1 << int(cpu));
+	return sprintf("%x", mask);
+}
+
+function set_netdev_cpu(dev, cpu, rx_queue) {
+	rx_queue ??= "rx-*";
+	let queues = glob(`/sys/class/net/${dev}/queues/${rx_queue}/rps_cpus`);
+	let val = cpu_mask(cpu);
 	if (disable)
 		val = 0;
 	for (let queue in queues) {
@@ -57,11 +77,18 @@ function set_netdev_cpu(dev, cpu) {
 		if (!do_nothing)
 			writefile(queue, `${val}`);
 	}
+	queues = glob(`/sys/class/net/${dev}/queues/${rx_queue}/rps_flow_cnt`);
+	for (let queue in queues) {
+		if (debug || do_nothing)
+			warn(`echo ${local_flows} > ${queue}\n`);
+		if (!do_nothing)
+			writefile(queue, `${local_flows}`);
+	}
 }
 
 function task_device_match(name, device)
 {
-	let napi_match = match(name, /napi\/([^-+])-\d+/);
+	let napi_match = match(name, /napi\/([^-]*)-\d+/);
 	if (!napi_match)
 		napi_match = match(name, /mt76-tx (phy\d+)/);
 	if (napi_match &&
@@ -134,6 +161,9 @@ for (let dev in netdevs) {
 			netdev: [],
 			phy: [],
 			tasks: [],
+			rx_tasks: [],
+			rx_queues: map(glob(`/sys/class/net/${dev}/queues/rx-*/rps_cpus`),
+			               (v) => basename(dirname(v))),
 		};
 	}
 
@@ -161,11 +191,51 @@ for (let path in glob("/proc/*/exe")) {
 			continue;
 
 		push(dev.tasks, pid);
+
+		let napi_match = match(name, /napi\/([^-]*)-(\d+)/);
+		if (napi_match && napi_match[2] > 0)
+			push(dev.rx_tasks, pid);
 		break;
 	}
 }
 
+function assign_dev_queues_cpu(dev) {
+	let num = length(dev.rx_queues);
+	if (num < length(dev.rx_tasks))
+		num = length(dev.rx_tasks);
+
+	for (let i = 0; i < num; i++) {
+		let cpu;
+
+		let task = dev.rx_tasks[i];
+		if (num >= length(cpus))
+			cpu = i % length(cpus);
+		else if (task)
+			cpu = get_next_cpu(napi_weight);
+		else
+			cpu = -1;
+		set_task_cpu(task, cpu);
+
+		let rxq = dev.rx_queues[i];
+		if (!rxq)
+			continue;
+
+		if (num >= length(cpus))
+			cpu = (i + 1) % length(cpus);
+		else if (all_cpus)
+			cpu = -1;
+		else
+			cpu = get_next_cpu(napi_weight, cpu);
+		for (let netdev in dev.netdev)
+			set_netdev_cpu(netdev, cpu, rxq);
+	}
+}
+
 function assign_dev_cpu(dev) {
+	if (length(dev.rx_queues) > 1 &&
+		length(dev.rx_tasks) > 1)
+		return assign_dev_queues_cpu(dev);
+
 	if (length(dev.tasks) > 0) {
 		let cpu = dev.napi_cpu = get_next_cpu(napi_weight);
 		for (let task in dev.tasks)
@@ -173,7 +243,11 @@ function assign_dev_cpu(dev) {
 	}
 
 	if (length(dev.netdev) > 0) {
-		let cpu = dev.rx_cpu = get_next_cpu(rx_weight, dev.napi_cpu);
+		let cpu;
+		if (all_cpus)
+			cpu = -1;
+		else
+			cpu = get_next_cpu(rx_weight, dev.napi_cpu);
 		for (let netdev in dev.netdev)
 			set_netdev_cpu(netdev, cpu);
 	}

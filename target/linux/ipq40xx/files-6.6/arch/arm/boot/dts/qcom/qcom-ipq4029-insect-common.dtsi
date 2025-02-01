@@ -20,6 +20,8 @@
 
 / {
 	aliases {
+		// TODO: Verify if the ethernet0 alias is needed
+		ethernet0 = &gmac;
 		led-boot = &status_green;
 		led-failsafe = &status_red;
 		led-running = &status_green;
@@ -33,16 +35,6 @@
 	};
 
 	soc {
-		rng@22000 {
-			status = "okay";
-		};
-
-		mdio@90000 {
-			status = "okay";
-			pinctrl-0 = <&mdio_pins>;
-			pinctrl-names = "default";
-		};
-
 		/* It is a 56-bit counter that supplies the count to the ARM arch
 		   timers and without upstream driver */
 		counter@4a1000 {
@@ -66,25 +58,6 @@
 			compatible = "qcom,tcsr";
 			reg = <0x1957000 0x100>;
 			qcom,wifi_noc_memtype_m0_m2 = <TCSR_WIFI_NOC_MEMTYPE_M0_M2>;
-		};
-
-		serial@78b0000 {
-			pinctrl-0 = <&serial_1_pins>;
-			pinctrl-names = "default";
-			status = "okay";
-
-			bluetooth {
-				compatible = "ti,cc2650";
-				enable-gpios = <&tlmm 12 GPIO_ACTIVE_LOW>;
-			};
-		};
-
-		crypto@8e3a000 {
-			status = "okay";
-		};
-
-		watchdog@b017000 {
-			status = "okay";
 		};
 	};
 
@@ -110,6 +83,18 @@
 	};
 };
 
+&watchdog {
+	status = "okay";
+};
+
+&prng {
+	status = "okay";
+};
+
+&crypto {
+	status = "okay";
+};
+
 &blsp_dma {
 	status = "okay";
 };
@@ -118,6 +103,17 @@
 	pinctrl-0 = <&serial_0_pins>;
 	pinctrl-names = "default";
 	status = "okay";
+};
+
+&blsp1_uart2 {
+	pinctrl-0 = <&serial_1_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	bluetooth {
+		compatible = "ti,cc2650";
+		enable-gpios = <&tlmm 12 GPIO_ACTIVE_LOW>;
+	};
 };
 
 &cryptobam {
@@ -134,13 +130,17 @@
 		pagesize = <32>;
 		reg = <0x50>;
 		read-only; /* This holds our MAC & Meraki board-data */
-		#address-cells = <1>;
-		#size-cells = <1>;
 
-		mac_address: mac-address@66 {
-			compatible = "mac-base";
-			reg = <0x66 0x6>;
-			#nvmem-cell-cells = <1>;
+		nvmem-layout {
+			compatible = "fixed-layout";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			mac_address: mac-address@66 {
+				compatible = "mac-base";
+				reg = <0x66 0x6>;
+				#nvmem-cell-cells = <1>;
+			};
 		};
 	};
 };
@@ -403,6 +403,16 @@
 	nvmem-cell-names = "mac-address";
 };
 
+&mdio {
+	status = "okay";
+	pinctrl-0 = <&mdio_pins>;
+	pinctrl-names = "default";
+
+	ar8035: ethernet-phy@1 {
+		reg = <1>;
+	};
+};
+
 &gmac {
 	status = "okay";
 	nvmem-cells = <&mac_address 0>;
@@ -419,11 +429,19 @@
 	status = "okay";
 
 	label = "lan";
-	phy-handle = <&ethphy1>;
+	phy-handle = <&ar8035>;
 	phy-mode = "rgmii-rxid";
 };
 
+&qca807x {
+	status = "disabled";
+};
+
 &ethphy0 {
+	status = "disabled";
+};
+
+&ethphy1 {
 	status = "disabled";
 };
 

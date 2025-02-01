@@ -16,21 +16,16 @@
 	};
 
 	aliases {
+		// TODO: Verify if the ethernet0 alias is needed
+		ethernet0 = &gmac;
 		led-boot = &led_power;
 		led-failsafe = &led_power;
 		led-running = &led_power;
 		led-upgrade = &led_power;
+		label-mac-device = &swport5;
 	};
 
 	soc {
-		rng@22000 {
-			status = "okay";
-		};
-
-		mdio@90000 {
-			status = "okay";
-		};
-
 		tcsr@1949000 {
 			compatible = "qcom,tcsr";
 			reg = <0x1949000 0x100>;
@@ -53,33 +48,6 @@
 			compatible = "qcom,tcsr";
 			reg = <0x1957000 0x100>;
 			qcom,wifi_noc_memtype_m0_m2 = <TCSR_WIFI_NOC_MEMTYPE_M0_M2>;
-		};
-
-		usb3@8af8800 {
-			status = "okay";
-
-			dwc3@8a00000 {
-				#address-cells = <1>;
-				#size-cells = <0>;
-
-				usb3_port1: port@1 {
-					reg = <1>;
-					#trigger-source-cells = <0>;
-				};
-
-				usb3_port2: port@2 {
-					reg = <2>;
-					#trigger-source-cells = <0>;
-				};
-			};
-		};
-
-		crypto@8e3a000 {
-			status = "okay";
-		};
-
-		watchdog@b017000 {
-			status = "okay";
 		};
 	};
 
@@ -149,6 +117,18 @@
 			gpios = <&tlmm 2 GPIO_ACTIVE_HIGH>;
 		};
 	};
+};
+
+&watchdog {
+	status = "okay";
+};
+
+&prng {
+	status = "okay";
+};
+
+&crypto {
+	status = "okay";
 };
 
 &cryptobam {
@@ -270,9 +250,40 @@
 			#size-cells = <1>;
 
 			partition@0 {
-				label = "ubi";
+				compatible = "linux,ubi";
 				reg = <0x00000000 0x08000000>;
+				label = "ubi";
+
+				volumes {
+					ubi_factory: ubi-volume-factory {
+						volname = "Factory";
+					};
+				};
 			};
+		};
+	};
+};
+
+&ubi_factory {
+	nvmem-layout {
+		compatible = "fixed-layout";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		precal_factory_1000: precal@1000 {
+			reg = <0x1000 0x2f20>;
+		};
+
+		macaddr_factory_1006: macaddr@1006 {
+			reg = <0x1006 0x6>;
+		};
+
+		precal_factory_5000: precal@5000 {
+			reg = <0x5000 0x2f20>;
+		};
+
+		macaddr_factory_5006: macaddr@5006 {
+			reg = <0x5006 0x6>;
 		};
 	};
 };
@@ -291,8 +302,33 @@
 	status = "okay";
 };
 
+&usb3 {
+	status = "okay";
+};
+
+&usb3_dwc {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	usb3_port1: port@1 {
+		reg = <1>;
+		#trigger-source-cells = <0>;
+	};
+
+	usb3_port2: port@2 {
+		reg = <2>;
+		#trigger-source-cells = <0>;
+	};
+};
+
+&mdio {
+	status = "okay";
+};
+
 &gmac {
 	status = "okay";
+	nvmem-cells = <&macaddr_factory_5006>;
+	nvmem-cell-names = "mac-address";
 };
 
 &switch {
@@ -317,14 +353,20 @@
 
 &swport5 {
 	status = "okay";
+	nvmem-cells = <&macaddr_factory_1006>;
+	nvmem-cell-names = "mac-address";
 };
 
 &wifi0 {
 	status = "okay";
+	nvmem-cell-names = "pre-calibration";
+	nvmem-cells = <&precal_factory_1000>;
 	qcom,ath10k-calibration-variant = "RT-AC58U";
 };
 
 &wifi1 {
 	status = "okay";
+	nvmem-cell-names = "pre-calibration";
+	nvmem-cells = <&precal_factory_5000>;
 	qcom,ath10k-calibration-variant = "RT-AC58U";
 };

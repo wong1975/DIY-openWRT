@@ -9,32 +9,17 @@
 	model = "devolo Magic 2 WiFi next";
 	compatible = "devolo,magic-2-wifi-next";
 
+	aliases {
+		// TODO: Verify if the ethernet0 alias is needed
+		ethernet0 = &gmac;
+	};
+
 	memory {
 		device_type = "memory";
 		reg = <0x80000000 0x10000000>;
 	};
 
 	soc {
-		rng@22000 {
-			status = "okay";
-		};
-
-		mdio@90000 {
-			status = "okay";
-			pinctrl-0 = <&mdio_pins>;
-			pinctrl-names = "default";
-			reset-gpios = <&tlmm 59 GPIO_ACTIVE_LOW>;
-			reset-delay-us = <2000>;
-		};
-
-		crypto@8e3a000 {
-			status = "okay";
-		};
-
-		watchdog@b017000 {
-			status = "okay";
-		};
-
 		gpio_export {
 			compatible = "gpio-export";
 			#size-cells = <0>;
@@ -86,6 +71,18 @@
 			default-state = "keep";
 		};
 	};
+};
+
+&watchdog {
+	status = "okay";
+};
+
+&prng {
+	status = "okay";
+};
+
+&crypto {
+	status = "okay";
 };
 
 &tlmm {
@@ -232,6 +229,14 @@
 			};
 		};
 	};
+};
+
+&mdio {
+	status = "okay";
+	pinctrl-0 = <&mdio_pins>;
+	pinctrl-names = "default";
+	reset-gpios = <&tlmm 59 GPIO_ACTIVE_LOW>;
+	reset-delay-us = <2000>;
 };
 
 &gmac {

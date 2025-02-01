@@ -30,7 +30,7 @@ define Package/perf
   DEPENDS:= +libelf +libdw +PACKAGE_libunwind:libunwind +libpthread +librt +objdump @!IN_SDK @KERNEL_PERF_EVENTS \
 	    +PACKAGE_libbfd:libbfd +PACKAGE_libopcodes:libopcodes +libtraceevent
   TITLE:=Linux performance monitoring tool
-  VERSION:=$(LINUX_VERSION)-$(PKG_RELEASE)
+  VERSION:=$(LINUX_VERSION)-r$(PKG_RELEASE)
   URL:=http://www.kernel.org
 endef
 
@@ -70,6 +70,10 @@ MAKE_FLAGS = \
 	WERROR=0 \
 	O=$(PKG_BUILD_DIR) \
 	prefix=/usr
+
+ifeq ($(LINUX_KARCH),powerpc)
+	MAKE_FLAGS += NO_AUXTRACE=1
+endif
 
 define Build/Compile
 	+$(MAKE) $(PKG_JOBS) $(MAKE_FLAGS) \

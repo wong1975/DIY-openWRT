@@ -195,6 +195,10 @@
 			partition@480000 {
 				label = "0:appsblenv";
 				reg = <0x480000 0x10000>;
+
+				nvmem-layout {
+					compatible = "u-boot,env";
+				};
 			};
 
 			partition@490000 {

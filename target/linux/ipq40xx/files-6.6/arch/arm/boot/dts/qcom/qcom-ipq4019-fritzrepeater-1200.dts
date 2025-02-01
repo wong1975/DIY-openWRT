@@ -11,6 +11,8 @@
 	compatible = "avm,fritzrepeater-1200";
 
 	aliases {
+		// TODO: Verify if the ethernet0 alias is needed
+		ethernet0 = &gmac;
 		led-boot = &power_green;
 		led-failsafe = &power_red;
 		led-running = &power_green;
@@ -19,20 +21,6 @@
 	};
 
 	soc {
-		rng@22000 {
-			status = "okay";
-		};
-
-		mdio@90000 {
-			status = "okay";
-			pinctrl-0 = <&mdio_pins>;
-			pinctrl-names = "default";
-
-			ethphy: ethernet-phy@0 {
-				reg = <0x0>;
-			};
-		};
-
 		tcsr@1949000 {
 			compatible = "qcom,tcsr";
 			reg = <0x1949000 0x100>;
@@ -49,14 +37,6 @@
 			compatible = "qcom,tcsr";
 			reg = <0x1957000 0x100>;
 			qcom,wifi_noc_memtype_m0_m2 = <TCSR_WIFI_NOC_MEMTYPE_M0_M2>;
-		};
-
-		crypto@8e3a000 {
-			status = "okay";
-		};
-
-		watchdog@b017000 {
-			status = "okay";
 		};
 	};
 
@@ -91,6 +71,18 @@
 			gpios = <&tlmm 49 GPIO_ACTIVE_LOW>;
 		};
 	};
+};
+
+&watchdog {
+	status = "okay";
+};
+
+&prng {
+	status = "okay";
+};
+
+&crypto {
+	status = "okay";
 };
 
 &tlmm {
@@ -255,6 +247,16 @@
 	qcom,ath10k-calibration-variant = "AVM-FRITZRepeater-1200";
 };
 
+&mdio {
+	status = "okay";
+	pinctrl-0 = <&mdio_pins>;
+	pinctrl-names = "default";
+
+	ethphy: ethernet-phy@0 {
+		reg = <0x0>;
+	};
+};
+
 &gmac {
 	status = "okay";
 };
@@ -271,6 +273,10 @@
 	label = "lan";
 	phy-handle = <&ethphy>;
 	phy-mode = "rgmii-id";
+};
+
+&qca807x {
+	status = "disabled";
 };
 
 &ethphy1 {

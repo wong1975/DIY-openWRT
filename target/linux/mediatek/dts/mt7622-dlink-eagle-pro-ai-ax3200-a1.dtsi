@@ -76,9 +76,9 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		switch: switch@0 {
+		switch: switch@1f {
 			compatible = "mediatek,mt7531";
-			reg = <0>;
+			reg = <31>;
 			interrupt-controller;
 			#interrupt-cells = <1>;
 			interrupt-parent = <&pio>;
@@ -266,8 +266,7 @@
 				};
 			};
 
-			config1: partition@1C0000 {
-				compatible = "nvmem-cells";
+			partition@1C0000 {
 				label = "Config1";
 				reg = <0x001C0000 0x00080000>;
 				read-only;
