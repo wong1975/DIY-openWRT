@@ -113,7 +113,8 @@ case "$FIRMWARE" in
 		;;
 	meraki,mr33 |\
 	meraki,mr74 |\
-	meraki,z3)
+	meraki,z3 |\
+	meraki,z3c)
 		caldata_extract_ubi "ART" 0x1000 0x2f20
 		caldata_valid "202f" || caldata_extract "ART" 0x1000 0x2f20
 		;;
@@ -213,7 +214,8 @@ case "$FIRMWARE" in
 		;;
 	meraki,mr33 |\
 	meraki,mr74 |\
-	meraki,z3)
+	meraki,z3 |\
+	meraki,z3c)
 		caldata_extract_ubi "ART" 0x5000 0x2f20
 		caldata_valid "202f" || caldata_extract "ART" 0x5000 0x2f20
 		;;
