@@ -71,6 +71,9 @@ struct rtl83xx_mib_desc {
 	struct rtl83xx_mib_item rx_pkts[ETHTOOL_RMON_HIST_MAX];
 	struct ethtool_rmon_hist_range rmon_ranges[ETHTOOL_RMON_HIST_MAX];
 
+	struct rtl83xx_mib_item drop_events;
+	struct rtl83xx_mib_item collisions;
+
 	struct rtl83xx_mib_item rx_pause_frames;
 	struct rtl83xx_mib_item tx_pause_frames;
 
