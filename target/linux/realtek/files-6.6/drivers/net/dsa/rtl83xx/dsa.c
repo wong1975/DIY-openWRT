@@ -9,6 +9,8 @@
 
 extern struct rtl83xx_soc_info soc_info;
 
+static void rtl83xx_init_counters(struct rtl838x_switch_priv *priv);
+
 static void rtl83xx_init_stats(struct rtl838x_switch_priv *priv)
 {
 	mutex_lock(&priv->reg_mutex);
@@ -438,6 +440,7 @@ static int rtl83xx_setup(struct dsa_switch *ds)
 		rtl839x_print_matrix();
 
 	rtl83xx_init_stats(priv);
+	rtl83xx_init_counters(priv);
 
 	rtl83xx_vlan_setup(priv);
 
@@ -502,6 +505,7 @@ static int rtl93xx_setup(struct dsa_switch *ds)
 	rtl930x_print_matrix();
 
 	/* TODO: Initialize statistics */
+	rtl83xx_init_counters(priv);
 
 	rtl83xx_vlan_setup(priv);
 
@@ -1173,10 +1177,8 @@ static void rtl93xx_phylink_mac_link_up(struct dsa_switch *ds, int port,
 	sw_w32_mask(0, 0x3, priv->r->mac_port_ctrl(port));
 }
 
-static const struct rtl83xx_mib_desc *rtl83xx_get_mib_desc(struct dsa_switch *ds)
+static const struct rtl83xx_mib_desc *rtl83xx_get_mib_desc(struct rtl838x_switch_priv *priv)
 {
-	struct rtl838x_switch_priv *priv = ds->priv;
-
 	switch (priv->family_id) {
 	case RTL8380_FAMILY_ID:
 		return &rtl838x_mib;
@@ -1218,15 +1220,165 @@ static bool rtl83xx_read_mib_item(struct rtl838x_switch_priv *priv, int port,
 	return true;
 }
 
+static void rtl83xx_update_counter(struct rtl838x_switch_priv *priv, int port,
+				   struct rtl83xx_counter *counter,
+				   const struct rtl83xx_mib_item *mib_item)
+{
+	uint64_t val64;
+	uint32_t val, diff;
+
+	if (rtl83xx_read_mib_item(priv, port, mib_item, &val64)) {
+		/* Only the lower 32 bits of the hardware counter are used. This avoids any
+		 * potential issue due to non-atomic read (as the lower and upper 32 bits are
+		 * read separately).
+		 */
+		val = (uint32_t)val64;
+		diff = val - counter->last;
+		counter->val += diff;
+		counter->last = val;
+	}
+}
+
+static void rtl83xx_update_port_counters(struct rtl838x_switch_priv *priv, int port)
+{
+	struct rtl83xx_counter_state *counters = &priv->ports[port].counters;
+	const struct rtl83xx_mib_desc *mib_desc;
+
+	mib_desc = rtl83xx_get_mib_desc(priv);
+	if (!mib_desc)
+		return;
+
+	rtl83xx_update_counter(priv, port, &counters->symbol_errors,
+			       &mib_desc->symbol_errors);
+
+	rtl83xx_update_counter(priv, port, &counters->if_in_octets,
+			       &mib_desc->if_in_octets);
+	rtl83xx_update_counter(priv, port, &counters->if_out_octets,
+			       &mib_desc->if_out_octets);
+	rtl83xx_update_counter(priv, port, &counters->if_in_ucast_pkts,
+			       &mib_desc->if_in_ucast_pkts);
+	rtl83xx_update_counter(priv, port, &counters->if_in_mcast_pkts,
+			       &mib_desc->if_in_mcast_pkts);
+	rtl83xx_update_counter(priv, port, &counters->if_in_bcast_pkts,
+			       &mib_desc->if_in_bcast_pkts);
+	rtl83xx_update_counter(priv, port, &counters->if_out_ucast_pkts,
+			       &mib_desc->if_out_ucast_pkts);
+	rtl83xx_update_counter(priv, port, &counters->if_out_mcast_pkts,
+			       &mib_desc->if_out_mcast_pkts);
+	rtl83xx_update_counter(priv, port, &counters->if_out_bcast_pkts,
+			       &mib_desc->if_out_bcast_pkts);
+	rtl83xx_update_counter(priv, port, &counters->if_out_discards,
+			       &mib_desc->if_out_discards);
+	rtl83xx_update_counter(priv, port, &counters->single_collisions,
+			       &mib_desc->single_collisions);
+	rtl83xx_update_counter(priv, port, &counters->multiple_collisions,
+			       &mib_desc->multiple_collisions);
+	rtl83xx_update_counter(priv, port, &counters->deferred_transmissions,
+			       &mib_desc->deferred_transmissions);
+	rtl83xx_update_counter(priv, port, &counters->late_collisions,
+			       &mib_desc->late_collisions);
+	rtl83xx_update_counter(priv, port, &counters->excessive_collisions,
+			       &mib_desc->excessive_collisions);
+	rtl83xx_update_counter(priv, port, &counters->crc_align_errors,
+			       &mib_desc->crc_align_errors);
+	rtl83xx_update_counter(priv, port, &counters->rx_pkts_over_max_octets,
+			       &mib_desc->rx_pkts_over_max_octets);
+
+	rtl83xx_update_counter(priv, port, &counters->unsupported_opcodes,
+			       &mib_desc->unsupported_opcodes);
+
+	rtl83xx_update_counter(priv, port, &counters->rx_undersize_pkts,
+			       &mib_desc->rx_undersize_pkts);
+	rtl83xx_update_counter(priv, port, &counters->rx_oversize_pkts,
+			       &mib_desc->rx_oversize_pkts);
+	rtl83xx_update_counter(priv, port, &counters->rx_fragments,
+			       &mib_desc->rx_fragments);
+	rtl83xx_update_counter(priv, port, &counters->rx_jabbers,
+			       &mib_desc->rx_jabbers);
+
+	for (int i = 0; i < ARRAY_SIZE(mib_desc->tx_pkts); i++) {
+		if (mib_desc->tx_pkts[i].reg == MIB_REG_INVALID)
+			break;
+
+		rtl83xx_update_counter(priv, port, &counters->tx_pkts[i],
+				       &mib_desc->tx_pkts[i]);
+	}
+	for (int i = 0; i < ARRAY_SIZE(mib_desc->rx_pkts); i++) {
+		if (mib_desc->rx_pkts[i].reg == MIB_REG_INVALID)
+			break;
+
+		rtl83xx_update_counter(priv, port, &counters->rx_pkts[i],
+				       &mib_desc->rx_pkts[i]);
+	}
+
+	rtl83xx_update_counter(priv, port, &counters->drop_events,
+			       &mib_desc->drop_events);
+	rtl83xx_update_counter(priv, port, &counters->collisions,
+			       &mib_desc->collisions);
+
+	rtl83xx_update_counter(priv, port, &counters->rx_pause_frames,
+			       &mib_desc->rx_pause_frames);
+	rtl83xx_update_counter(priv, port, &counters->tx_pause_frames,
+			       &mib_desc->tx_pause_frames);
+}
+
+// TODO: make dependent on platform (based on possible data rate)
+#define RTL83XX_COUNTERS_POLL_INTERVAL	(3 * HZ)
+
+static void rtl83xx_poll_counters(struct work_struct *work)
+{
+	struct rtl838x_switch_priv *priv = container_of(to_delayed_work(work),
+							struct rtl838x_switch_priv,
+							counters_work);
+	struct rtl83xx_counter_state *counters;
+	ktime_t a, b;
+
+	a = ktime_get();
+	for (int i = 0; i < priv->cpu_port; i++) {
+		if (!priv->ports[i].phy)
+			continue;
+
+		counters = &priv->ports[i].counters;
+
+		spin_lock(&counters->lock);
+		rtl83xx_update_port_counters(priv, i);
+		spin_unlock(&counters->lock);
+	}
+	b = ktime_get();
+	// TODO: remove this
+	pr_debug("rtl83xx_poll_counters: %lld us\n", ktime_us_delta(b, a));
+
+	schedule_delayed_work(&priv->counters_work, RTL83XX_COUNTERS_POLL_INTERVAL);
+}
+
+static void rtl83xx_init_counters(struct rtl838x_switch_priv *priv)
+{
+	struct rtl83xx_counter_state *counters;
+
+	for (int i = 0; i < priv->cpu_port; i++) {
+		if (!priv->ports[i].phy)
+			continue;
+
+		counters = &priv->ports[i].counters;
+
+		memset(counters, 0, sizeof(*counters));
+		spin_lock_init(&counters->lock);
+	}
+
+	INIT_DELAYED_WORK(&priv->counters_work, rtl83xx_poll_counters);
+	schedule_delayed_work(&priv->counters_work, RTL83XX_COUNTERS_POLL_INTERVAL);
+}
+
 static void rtl83xx_get_strings(struct dsa_switch *ds,
 				int port, u32 stringset, u8 *data)
 {
+	struct rtl838x_switch_priv *priv = ds->priv;
 	const struct rtl83xx_mib_desc *mib_desc;
 
 	if (stringset != ETH_SS_STATS)
 		return;
 
-	mib_desc = rtl83xx_get_mib_desc(ds);
+	mib_desc = rtl83xx_get_mib_desc(priv);
 	if (!mib_desc)
 		return;
 
@@ -1241,7 +1393,7 @@ static void rtl83xx_get_ethtool_stats(struct dsa_switch *ds, int port,
 	const struct rtl83xx_mib_desc *mib_desc;
 	const struct rtl83xx_mib_item *mib_item;
 
-	mib_desc = rtl83xx_get_mib_desc(ds);
+	mib_desc = rtl83xx_get_mib_desc(priv);
 	if (!mib_desc)
 		return;
 
@@ -1253,12 +1405,13 @@ static void rtl83xx_get_ethtool_stats(struct dsa_switch *ds, int port,
 
 static int rtl83xx_get_sset_count(struct dsa_switch *ds, int port, int sset)
 {
+	struct rtl838x_switch_priv *priv = ds->priv;
 	const struct rtl83xx_mib_desc *mib_desc;
 
 	if (sset != ETH_SS_STATS)
 		return 0;
 
-	mib_desc = rtl83xx_get_mib_desc(ds);
+	mib_desc = rtl83xx_get_mib_desc(priv);
 	if (!mib_desc)
 		return 0;
 
@@ -1270,89 +1423,70 @@ static void rtl83xx_get_eth_phy_stats(struct dsa_switch *ds, int port,
 				      struct ethtool_eth_phy_stats *phy_stats)
 {
 	struct rtl838x_switch_priv *priv = ds->priv;
-	const struct rtl83xx_mib_desc *mib_desc;
+	struct rtl83xx_counter_state *counters = &priv->ports[port].counters;
 
-	mib_desc = rtl83xx_get_mib_desc(ds);
-	if (!mib_desc)
-		return;
+	spin_lock(&counters->lock);
 
-	rtl83xx_read_mib_item(priv, port, &mib_desc->symbol_errors,
-			      &phy_stats->SymbolErrorDuringCarrier);
+	rtl83xx_update_port_counters(priv, port);
+
+	phy_stats->SymbolErrorDuringCarrier = counters->symbol_errors.val;
+
+	spin_unlock(&counters->lock);
 }
 
 static void rtl83xx_get_eth_mac_stats(struct dsa_switch *ds, int port,
 				      struct ethtool_eth_mac_stats *mac_stats)
 {
 	struct rtl838x_switch_priv *priv = ds->priv;
-	const struct rtl83xx_mib_desc *mib_desc;
-	uint64_t val;
+	struct rtl83xx_counter_state *counters = &priv->ports[port].counters;
 
-	mib_desc = rtl83xx_get_mib_desc(ds);
-	if (!mib_desc)
-		return;
+	spin_lock(&counters->lock);
+
+	rtl83xx_update_port_counters(priv, port);
 
 	/* Frame and octet counters are calculated based on RFC3635 */
 
-	rtl83xx_read_mib_item(priv, port, &mib_desc->if_in_ucast_pkts,
-			      &mac_stats->FramesReceivedOK);
-	if (rtl83xx_read_mib_item(priv, port, &mib_desc->if_in_mcast_pkts,
-				  &mac_stats->MulticastFramesReceivedOK))
-		mac_stats->FramesReceivedOK += mac_stats->MulticastFramesReceivedOK;
-	if (rtl83xx_read_mib_item(priv, port, &mib_desc->if_in_bcast_pkts,
-				  &mac_stats->BroadcastFramesReceivedOK))
-		mac_stats->FramesReceivedOK += mac_stats->BroadcastFramesReceivedOK;
-	if (rtl83xx_read_mib_item(priv, port, &mib_desc->rx_pause_frames, &val))
-		mac_stats->FramesReceivedOK += val;
-	if (rtl83xx_read_mib_item(priv, port, &mib_desc->rx_pkts_over_max_octets, &val))
-		mac_stats->FramesReceivedOK += val;
+	mac_stats->FramesReceivedOK = counters->if_in_ucast_pkts.val +
+				      counters->if_in_mcast_pkts.val +
+				      counters->if_in_bcast_pkts.val +
+				      counters->rx_pause_frames.val +
+				      counters->rx_pkts_over_max_octets.val;
 
-	rtl83xx_read_mib_item(priv, port, &mib_desc->if_out_ucast_pkts,
-			      &mac_stats->FramesTransmittedOK);
-	if (rtl83xx_read_mib_item(priv, port, &mib_desc->if_out_mcast_pkts,
-				  &mac_stats->MulticastFramesXmittedOK))
-		mac_stats->FramesTransmittedOK += mac_stats->MulticastFramesXmittedOK;
-	if (rtl83xx_read_mib_item(priv, port, &mib_desc->if_out_bcast_pkts,
-				  &mac_stats->BroadcastFramesXmittedOK))
-		mac_stats->FramesTransmittedOK += mac_stats->BroadcastFramesXmittedOK;
-	if (rtl83xx_read_mib_item(priv, port, &mib_desc->tx_pause_frames, &val))
-		mac_stats->FramesTransmittedOK += val;
-	if (rtl83xx_read_mib_item(priv, port, &mib_desc->if_out_discards, &val))
-		mac_stats->FramesTransmittedOK -= val;
+	mac_stats->FramesTransmittedOK = counters->if_out_ucast_pkts.val +
+					 counters->if_out_mcast_pkts.val +
+					 counters->if_out_bcast_pkts.val +
+					 counters->tx_pause_frames.val -
+					 counters->if_out_discards.val;
 
-	rtl83xx_read_mib_item(priv, port, &mib_desc->if_in_octets,
-			      &mac_stats->OctetsReceivedOK);
-	mac_stats->OctetsReceivedOK -= 18 * mac_stats->FramesReceivedOK;
-	rtl83xx_read_mib_item(priv, port, &mib_desc->if_out_octets,
-			      &mac_stats->OctetsTransmittedOK);
-	mac_stats->OctetsTransmittedOK -= 18 * mac_stats->FramesTransmittedOK;
+	mac_stats->OctetsReceivedOK = counters->if_in_octets.val -
+				      18 * mac_stats->FramesReceivedOK;
+	mac_stats->OctetsTransmittedOK = counters->if_out_octets.val -
+				         18 * mac_stats->FramesTransmittedOK;
 
-	rtl83xx_read_mib_item(priv, port, &mib_desc->single_collisions,
-			      &mac_stats->SingleCollisionFrames);
-	rtl83xx_read_mib_item(priv, port, &mib_desc->multiple_collisions,
-			      &mac_stats->MultipleCollisionFrames);
-	rtl83xx_read_mib_item(priv, port, &mib_desc->deferred_transmissions,
-			      &mac_stats->FramesWithDeferredXmissions);
-	rtl83xx_read_mib_item(priv, port, &mib_desc->late_collisions,
-			      &mac_stats->LateCollisions);
-	rtl83xx_read_mib_item(priv, port, &mib_desc->excessive_collisions,
-			      &mac_stats->FramesAbortedDueToXSColls);
+	mac_stats->SingleCollisionFrames = counters->single_collisions.val;
+	mac_stats->MultipleCollisionFrames = counters->multiple_collisions.val;
+	mac_stats->FramesWithDeferredXmissions = counters->deferred_transmissions.val;
+	mac_stats->LateCollisions = counters->late_collisions.val;
+	mac_stats->FramesAbortedDueToXSColls = counters->excessive_collisions.val;
 
-	rtl83xx_read_mib_item(priv, port, &mib_desc->crc_align_errors,
-			      &mac_stats->FrameCheckSequenceErrors);
+	mac_stats->FrameCheckSequenceErrors = counters->crc_align_errors.val;
+
+	spin_unlock(&counters->lock);
 }
 
 static void rtl83xx_get_eth_ctrl_stats(struct dsa_switch *ds, int port,
 				       struct ethtool_eth_ctrl_stats *ctrl_stats)
 {
 	struct rtl838x_switch_priv *priv = ds->priv;
-	const struct rtl83xx_mib_desc *mib_desc;
+	struct rtl83xx_counter_state *counters = &priv->ports[port].counters;
 
-	mib_desc = rtl83xx_get_mib_desc(ds);
-	if (!mib_desc)
-		return;
+	spin_lock(&counters->lock);
 
-	rtl83xx_read_mib_item(priv, port, &mib_desc->unsupported_opcodes,
-			      &ctrl_stats->UnsupportedOpcodesReceived);
+	rtl83xx_update_port_counters(priv, port);
+
+	ctrl_stats->UnsupportedOpcodesReceived = counters->unsupported_opcodes.val;
+
+	spin_unlock(&counters->lock);
 }
 
 static void rtl83xx_get_rmon_stats(struct dsa_switch *ds, int port,
@@ -1361,26 +1495,26 @@ static void rtl83xx_get_rmon_stats(struct dsa_switch *ds, int port,
 {
 	struct rtl838x_switch_priv *priv = ds->priv;
 	const struct rtl83xx_mib_desc *mib_desc;
+	struct rtl83xx_counter_state *counters = &priv->ports[port].counters;
 
-	mib_desc = rtl83xx_get_mib_desc(ds);
+	mib_desc = rtl83xx_get_mib_desc(priv);
 	if (!mib_desc)
 		return;
 
-	rtl83xx_read_mib_item(priv, port, &mib_desc->rx_undersize_pkts,
-			      &rmon_stats->undersize_pkts);
-	rtl83xx_read_mib_item(priv, port, &mib_desc->rx_oversize_pkts,
-			      &rmon_stats->oversize_pkts);
-	rtl83xx_read_mib_item(priv, port, &mib_desc->rx_fragments,
-			      &rmon_stats->fragments);
-	rtl83xx_read_mib_item(priv, port, &mib_desc->rx_jabbers,
-			      &rmon_stats->jabbers);
+	spin_lock(&counters->lock);
+
+	rtl83xx_update_port_counters(priv, port);
+
+	rmon_stats->undersize_pkts = counters->rx_undersize_pkts.val;
+	rmon_stats->oversize_pkts = counters->rx_oversize_pkts.val;
+	rmon_stats->fragments = counters->rx_fragments.val;
+	rmon_stats->jabbers = counters->rx_jabbers.val;
 
 	for (int i = 0; i < ARRAY_SIZE(mib_desc->rx_pkts); i++) {
 		if (mib_desc->rx_pkts[i].reg == MIB_REG_INVALID)
 			break;
 
-		rtl83xx_read_mib_item(priv, port, &mib_desc->rx_pkts[i],
-				      &rmon_stats->hist[i]);
+		rmon_stats->hist[i] = counters->rx_pkts[i].val;
 	}
 
 
@@ -1388,73 +1522,67 @@ static void rtl83xx_get_rmon_stats(struct dsa_switch *ds, int port,
 		if (mib_desc->tx_pkts[i].reg == MIB_REG_INVALID)
 			break;
 
-		rtl83xx_read_mib_item(priv, port, &mib_desc->tx_pkts[i],
-				      &rmon_stats->hist_tx[i]);
+		rmon_stats->hist_tx[i] = counters->tx_pkts[i].val;
 	}
 
 	*ranges = mib_desc->rmon_ranges;
+
+	spin_unlock(&counters->lock);
 }
 
 static void rtl83xx_get_stats64(struct dsa_switch *ds, int port,
 				struct rtnl_link_stats64 *s)
 {
 	struct rtl838x_switch_priv *priv = ds->priv;
-	const struct rtl83xx_mib_desc *mib_desc;
-	uint64_t val;
+	struct rtl83xx_counter_state *counters = &priv->ports[port].counters;
 
-	mib_desc = rtl83xx_get_mib_desc(ds);
-	if (!mib_desc)
-		return;
+	spin_lock(&counters->lock);
 
-	rtl83xx_read_mib_item(priv, port, &mib_desc->if_in_ucast_pkts,  &s->rx_packets);
-	if (rtl83xx_read_mib_item(priv, port, &mib_desc->if_in_mcast_pkts, &s->multicast))
-		s->rx_packets += s->multicast;
-	if (rtl83xx_read_mib_item(priv, port, &mib_desc->if_in_bcast_pkts, &val))
-		s->rx_packets += val;
-	if (rtl83xx_read_mib_item(priv, port, &mib_desc->rx_pkts_over_max_octets, &val))
-		s->rx_packets += val;
+	rtl83xx_update_port_counters(priv, port);
 
-	rtl83xx_read_mib_item(priv, port, &mib_desc->if_out_ucast_pkts, &s->tx_packets);
-	if (rtl83xx_read_mib_item(priv, port, &mib_desc->if_out_mcast_pkts, &val))
-		s->tx_packets += val;
-	if (rtl83xx_read_mib_item(priv, port, &mib_desc->if_out_bcast_pkts, &val))
-		s->tx_packets += val;
-	if (rtl83xx_read_mib_item(priv, port, &mib_desc->if_out_discards, &val))
-		s->tx_packets -= val;
+	s->rx_packets = counters->if_in_ucast_pkts.val +
+			counters->if_in_mcast_pkts.val +
+			counters->if_in_bcast_pkts.val +
+			counters->rx_pkts_over_max_octets.val;
+
+	s->tx_packets = counters->if_out_ucast_pkts.val +
+			counters->if_out_mcast_pkts.val +
+			counters->if_out_bcast_pkts.val -
+			counters->if_out_discards.val;
 
 	/* FCS for each packet has to be subtracted */
-	rtl83xx_read_mib_item(priv, port, &mib_desc->if_in_octets, &s->rx_bytes);
-	s->rx_bytes -= 4 * s->rx_packets;
-	rtl83xx_read_mib_item(priv, port, &mib_desc->if_out_octets, &s->tx_bytes);
-	s->tx_bytes -= 4 * s->tx_packets;
+	s->rx_bytes = counters->if_in_octets.val - 4 * s->rx_packets;
+	s->tx_bytes = counters->if_out_octets.val - 4 * s->tx_packets;
 
-	rtl83xx_read_mib_item(priv, port, &mib_desc->collisions, &s->collisions);
+	s->collisions = counters->collisions.val;
 
-	rtl83xx_read_mib_item(priv, port, &mib_desc->drop_events, &s->rx_dropped);
-	rtl83xx_read_mib_item(priv, port, &mib_desc->if_out_discards, &s->tx_dropped);
+	s->rx_dropped = counters->drop_events.val;
+	s->tx_dropped = counters->if_out_discards.val;
 
-	rtl83xx_read_mib_item(priv, port, &mib_desc->crc_align_errors, &s->rx_crc_errors);
+	s->rx_crc_errors = counters->crc_align_errors.val;
 	s->rx_errors = s->rx_crc_errors;
 
-	rtl83xx_read_mib_item(priv, port, &mib_desc->excessive_collisions, &s->tx_aborted_errors);
-	rtl83xx_read_mib_item(priv, port, &mib_desc->late_collisions, &s->tx_window_errors);
+	s->tx_aborted_errors = counters->excessive_collisions.val;
+	s->tx_window_errors = counters->late_collisions.val;
 	s->tx_errors = s->tx_aborted_errors + s->tx_window_errors;
+
+	spin_unlock(&counters->lock);
 }
 
 static void rtl83xx_get_pause_stats(struct dsa_switch *ds, int port,
 				    struct ethtool_pause_stats *pause_stats)
 {
 	struct rtl838x_switch_priv *priv = ds->priv;
-	const struct rtl83xx_mib_desc *mib_desc;
+	struct rtl83xx_counter_state *counters = &priv->ports[port].counters;
 
-	mib_desc = rtl83xx_get_mib_desc(ds);
-	if (!mib_desc)
-		return;
+	spin_lock(&counters->lock);
 
-	rtl83xx_read_mib_item(priv, port, &mib_desc->tx_pause_frames,
-			      &pause_stats->tx_pause_frames);
-	rtl83xx_read_mib_item(priv, port, &mib_desc->rx_pause_frames,
-			      &pause_stats->rx_pause_frames);
+	rtl83xx_update_port_counters(priv, port);
+
+	pause_stats->tx_pause_frames = counters->tx_pause_frames.val;
+	pause_stats->rx_pause_frames = counters->rx_pause_frames.val;
+
+	spin_unlock(&counters->lock);
 }
 
 static int rtl83xx_mc_group_alloc(struct rtl838x_switch_priv *priv, int port)
