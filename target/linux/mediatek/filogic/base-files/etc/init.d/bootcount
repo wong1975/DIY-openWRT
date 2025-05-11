@@ -26,5 +26,8 @@ boot() {
 	zyxel,ex5700-telenor)
 		fw_setenv uboot_bootcount 0
 		;;
+	zyxel,wx3600-telenor)
+		fw_setenv uboot_bootcount 0
+		;;
 	esac
 }
