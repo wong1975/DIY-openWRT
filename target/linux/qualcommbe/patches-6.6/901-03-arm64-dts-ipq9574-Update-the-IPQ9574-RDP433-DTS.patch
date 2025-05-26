@@ -1,0 +1,507 @@
+From 5b4cb0d6d600942f5762c8f011582cd1af7f7546 Mon Sep 17 00:00:00 2001
+From: Luo Jie <quic_luoj@quicinc.com>
+Date: Thu, 22 May 2025 11:21:12 +0800
+Subject: [PATCH] arm64: dts: ipq9574: Update the IPQ9574 RDP433 DTS
+
+Update the PCS & PPE dts nodes to align with the updated drivers.
+
+Signed-off-by: Luo Jie <quic_luoj@quicinc.com>
+---
+ arch/arm64/boot/dts/qcom/ipq9574-rdp433.dts | 148 +++++++++++++------
+ arch/arm64/boot/dts/qcom/ipq9574.dtsi       | 152 ++++++++------------
+ 2 files changed, 169 insertions(+), 131 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/ipq9574-rdp433.dts b/arch/arm64/boot/dts/qcom/ipq9574-rdp433.dts
+index 6bebd57f7..427829b78 100644
+--- a/arch/arm64/boot/dts/qcom/ipq9574-rdp433.dts
++++ b/arch/arm64/boot/dts/qcom/ipq9574-rdp433.dts
+@@ -69,6 +69,7 @@ ethernet-phy-package@0 {
+ 
+ 		phy0: ethernet-phy@10 {
+ 			reg = <0x10>;
++			clocks = <&cmn_pll ETH_25MHZ_CLK>;
+ 		};
+ 
+ 		phy1: ethernet-phy@11 {
+@@ -86,6 +87,7 @@ phy3: ethernet-phy@13 {
+ 
+ 	phy4: ethernet-phy@8 {
+ 		compatible ="ethernet-phy-ieee802.3-c45";
++		clocks = <&cmn_pll ETH1_50MHZ_CLK>;
+ 		reg = <8>;
+ 
+ 		nvmem-cells = <&aqr_fw>;
+@@ -94,6 +96,7 @@ phy4: ethernet-phy@8 {
+ 
+ 	phy5: ethernet-phy@0 {
+ 		compatible ="ethernet-phy-ieee802.3-c45";
++		clocks = <&cmn_pll ETH2_50MHZ_CLK>;
+ 		reg = <0>;
+ 
+ 		nvmem-cells = <&aqr_fw>;
+@@ -220,6 +223,67 @@ rclk-pins {
+ 	};
+ };
+ 
++&pcs0 {
++        status = "okay";
++};
++
++&pcs0_ch0 {
++        clocks = <&nsscc NSS_CC_UNIPHY_PORT1_RX_CLK>,
++                 <&nsscc NSS_CC_UNIPHY_PORT1_TX_CLK>;
++        clock-names = "rx",
++                      "tx";
++        status = "okay";
++};
++
++&pcs0_ch1 {
++        clocks = <&nsscc NSS_CC_UNIPHY_PORT2_RX_CLK>,
++                 <&nsscc NSS_CC_UNIPHY_PORT2_TX_CLK>;
++        clock-names = "rx",
++                      "tx";
++        status = "okay";
++};
++
++&pcs0_ch2 {
++        clocks = <&nsscc NSS_CC_UNIPHY_PORT3_RX_CLK>,
++                 <&nsscc NSS_CC_UNIPHY_PORT3_TX_CLK>;
++        clock-names = "rx",
++                      "tx";
++        status = "okay";
++};
++
++&pcs0_ch3 {
++        clocks = <&nsscc NSS_CC_UNIPHY_PORT4_RX_CLK>,
++                 <&nsscc NSS_CC_UNIPHY_PORT4_TX_CLK>;
++        clock-names = "rx",
++                      "tx";
++        status = "okay";
++};
++
++&pcs1 {
++        status = "okay";
++};
++
++&pcs1_ch0 {
++        clocks = <&nsscc NSS_CC_UNIPHY_PORT5_RX_CLK>,
++                 <&nsscc NSS_CC_UNIPHY_PORT5_TX_CLK>;
++        clock-names = "rx",
++                      "tx";
++        status = "okay";
++};
++
++&pcs2{
++        status = "okay";
++};
++
++&pcs2_ch0 {
++        clocks = <&nsscc NSS_CC_UNIPHY_PORT6_RX_CLK>,
++                 <&nsscc NSS_CC_UNIPHY_PORT6_TX_CLK>;
++        clock-names = "rx",
++                      "tx";
++        status = "okay";
++};
++
++
+ &qcom_ppe {
+ 	ethernet-ports {
+ 		#address-cells = <1>;
+@@ -231,19 +295,19 @@ port@1 {
+ 			managed = "in-band-status";
+ 			label = "lan1";
+ 			phy-handle = <&phy0>;
+-			pcs-handle = <&pcsuniphy0_ch0>;
++			pcs-handle = <&pcs0_ch0>;
+ 			clocks = <&nsscc NSS_CC_PORT1_MAC_CLK>,
+ 				 <&nsscc NSS_CC_PORT1_RX_CLK>,
+ 				 <&nsscc NSS_CC_PORT1_TX_CLK>;
+-			clock-names = "port_mac",
+-				      "port_rx",
+-				      "port_tx";
++			clock-names = "mac",
++				      "rx",
++				      "tx";
+ 			resets = <&nsscc PORT1_MAC_ARES>,
+ 				 <&nsscc PORT1_RX_ARES>,
+ 				 <&nsscc PORT1_TX_ARES>;
+-			reset-names = "port_mac",
+-				      "port_rx",
+-				      "port_tx";
++			reset-names = "mac",
++				      "rx",
++				      "tx";
+ 		};
+ 
+ 		port@2 {
+@@ -252,19 +316,19 @@ port@2 {
+ 			managed = "in-band-status";
+ 			label = "lan2";
+ 			phy-handle = <&phy1>;
+-			pcs-handle = <&pcsuniphy0_ch1>;
++			pcs-handle = <&pcs0_ch1>;
+ 			clocks = <&nsscc NSS_CC_PORT2_MAC_CLK>,
+ 				 <&nsscc NSS_CC_PORT2_RX_CLK>,
+ 				 <&nsscc NSS_CC_PORT2_TX_CLK>;
+-			clock-names = "port_mac",
+-				      "port_rx",
+-				      "port_tx";
++			clock-names = "mac",
++				      "rx",
++				      "tx";
+ 			resets = <&nsscc PORT2_MAC_ARES>,
+ 				 <&nsscc PORT2_RX_ARES>,
+ 				 <&nsscc PORT2_TX_ARES>;
+-			reset-names = "port_mac",
+-				      "port_rx",
+-				      "port_tx";
++			reset-names = "mac",
++				      "rx",
++				      "tx";
+ 		};
+ 
+ 		port@3 {
+@@ -273,19 +337,19 @@ port@3 {
+ 			managed = "in-band-status";
+ 			label = "lan3";
+ 			phy-handle = <&phy2>;
+-			pcs-handle = <&pcsuniphy0_ch2>;
++			pcs-handle = <&pcs0_ch2>;
+ 			clocks = <&nsscc NSS_CC_PORT3_MAC_CLK>,
+ 				 <&nsscc NSS_CC_PORT3_RX_CLK>,
+ 				 <&nsscc NSS_CC_PORT3_TX_CLK>;
+-			clock-names = "port_mac",
+-				      "port_rx",
+-				      "port_tx";
++			clock-names = "mac",
++				      "rx",
++				      "tx";
+ 			resets = <&nsscc PORT3_MAC_ARES>,
+ 				 <&nsscc PORT3_RX_ARES>,
+ 				 <&nsscc PORT3_TX_ARES>;
+-			reset-names = "port_mac",
+-				      "port_rx",
+-				      "port_tx";
++			reset-names = "mac",
++				      "rx",
++				      "tx";
+ 		};
+ 
+ 		port@4 {
+@@ -294,19 +358,19 @@ port@4 {
+ 			managed = "in-band-status";
+ 			label = "lan4";
+ 			phy-handle = <&phy3>;
+-			pcs-handle = <&pcsuniphy0_ch3>;
++			pcs-handle = <&pcs0_ch3>;
+ 			clocks = <&nsscc NSS_CC_PORT4_MAC_CLK>,
+ 				 <&nsscc NSS_CC_PORT4_RX_CLK>,
+ 				 <&nsscc NSS_CC_PORT4_TX_CLK>;
+-			clock-names = "port_mac",
+-				      "port_rx",
+-				      "port_tx";
++			clock-names = "mac",
++				      "rx",
++				      "tx";
+ 			resets = <&nsscc PORT4_MAC_ARES>,
+ 				 <&nsscc PORT4_RX_ARES>,
+ 				 <&nsscc PORT4_TX_ARES>;
+-			reset-names = "port_mac",
+-				      "port_rx",
+-				      "port_tx";
++			reset-names = "mac",
++				      "rx",
++				      "tx";
+ 		};
+ 
+ 		port@5 {
+@@ -315,19 +379,19 @@ port@5 {
+ 			managed = "in-band-status";
+ 			label = "lan5";
+ 			phy-handle = <&phy4>;
+-			pcs-handle = <&pcsuniphy1_ch0>;
++			pcs-handle = <&pcs1_ch0>;
+ 			clocks = <&nsscc NSS_CC_PORT5_MAC_CLK>,
+ 				 <&nsscc NSS_CC_PORT5_RX_CLK>,
+ 				 <&nsscc NSS_CC_PORT5_TX_CLK>;
+-			clock-names = "port_mac",
+-				      "port_rx",
+-				      "port_tx";
++			clock-names = "mac",
++				      "rx",
++				      "tx";
+ 			resets = <&nsscc PORT5_MAC_ARES>,
+ 				 <&nsscc PORT5_RX_ARES>,
+ 				 <&nsscc PORT5_TX_ARES>;
+-			reset-names = "port_mac",
+-				      "port_rx",
+-				      "port_tx";
++			reset-names = "mac",
++				      "rx",
++				      "tx";
+ 		};
+ 
+ 		port@6 {
+@@ -336,19 +400,19 @@ port@6 {
+ 			managed = "in-band-status";
+ 			label = "wan";
+ 			phy-handle = <&phy5>;
+-			pcs-handle = <&pcsuniphy2_ch0>;
++			pcs-handle = <&pcs2_ch0>;
+ 			clocks = <&nsscc NSS_CC_PORT6_MAC_CLK>,
+ 				 <&nsscc NSS_CC_PORT6_RX_CLK>,
+ 				 <&nsscc NSS_CC_PORT6_TX_CLK>;
+-			clock-names = "port_mac",
+-				      "port_rx",
+-				      "port_tx";
++			clock-names = "mac",
++				      "rx",
++				      "tx";
+ 			resets = <&nsscc PORT6_MAC_ARES>,
+ 				 <&nsscc PORT6_RX_ARES>,
+ 				 <&nsscc PORT6_TX_ARES>;
+-			reset-names = "port_mac",
+-				      "port_rx",
+-				      "port_tx";
++			reset-names = "mac",
++				      "rx",
++				      "tx";
+ 		};
+ 	};
+ };
+diff --git a/arch/arm64/boot/dts/qcom/ipq9574.dtsi b/arch/arm64/boot/dts/qcom/ipq9574.dtsi
+index d992f6b6a..0b8741d69 100644
+--- a/arch/arm64/boot/dts/qcom/ipq9574.dtsi
++++ b/arch/arm64/boot/dts/qcom/ipq9574.dtsi
+@@ -1271,9 +1271,9 @@ qcom_ppe: ethernet@3a000000 {
+ 				 <&nsscc NSS_CC_PPE_SWITCH_IPE_CLK>,
+ 				 <&nsscc NSS_CC_PPE_SWITCH_BTQ_CLK>;
+ 			clock-names = "ppe",
+-				      "ppe_cfg",
+-				      "ppe_ipe",
+-				      "ppe_btq";
++				      "apb",
++				      "ipe",
++				      "btq";
+ 			resets = <&nsscc PPE_FULL_RESET>;
+ 			interconnects = <&nsscc MASTER_NSSNOC_PPE
+ 					 &nsscc SLAVE_NSSNOC_PPE>,
+@@ -1298,11 +1298,10 @@ &gcc SLAVE_NSSNOC_MEMNOC>,
+ 					     "memnoc_nssnoc_1";
+ 
+ 			edma {
+-				compatible = "qcom,ipq9574-edma";
+ 				clocks = <&nsscc NSS_CC_PPE_EDMA_CLK>,
+ 					 <&nsscc NSS_CC_PPE_EDMA_CFG_CLK>;
+-				clock-names = "edma",
+-					      "edma-cfg";
++				clock-names = "sys",
++					      "apb";
+ 				resets = <&nsscc EDMA_HW_RESET>;
+ 				reset-names = "edma_rst";
+ 				interrupts = <GIC_SPI 371 IRQ_TYPE_LEVEL_HIGH>,
+@@ -1334,143 +1333,118 @@ edma {
+ 					     <GIC_SPI 353 IRQ_TYPE_LEVEL_HIGH>,
+ 					     <GIC_SPI 354 IRQ_TYPE_LEVEL_HIGH>,
+ 					     <GIC_SPI 499 IRQ_TYPE_LEVEL_HIGH>;
+-				interrupt-names = "edma_txcmpl_8",
+-						  "edma_txcmpl_9",
+-						  "edma_txcmpl_10",
+-						  "edma_txcmpl_11",
+-						  "edma_txcmpl_12",
+-						  "edma_txcmpl_13",
+-						  "edma_txcmpl_14",
+-						  "edma_txcmpl_15",
+-						  "edma_txcmpl_16",
+-						  "edma_txcmpl_17",
+-						  "edma_txcmpl_18",
+-						  "edma_txcmpl_19",
+-						  "edma_txcmpl_20",
+-						  "edma_txcmpl_21",
+-						  "edma_txcmpl_22",
+-						  "edma_txcmpl_23",
+-						  "edma_txcmpl_24",
+-						  "edma_txcmpl_25",
+-						  "edma_txcmpl_26",
+-						  "edma_txcmpl_27",
+-						  "edma_txcmpl_28",
+-						  "edma_txcmpl_29",
+-						  "edma_txcmpl_30",
+-						  "edma_txcmpl_31",
+-						  "edma_rxdesc_20",
+-						  "edma_rxdesc_21",
+-						  "edma_rxdesc_22",
+-						  "edma_rxdesc_23",
+-						  "edma_misc";
++				interrupt-names = "txcmpl_8",
++						  "txcmpl_9",
++						  "txcmpl_10",
++						  "txcmpl_11",
++						  "txcmpl_12",
++						  "txcmpl_13",
++						  "txcmpl_14",
++						  "txcmpl_15",
++						  "txcmpl_16",
++						  "txcmpl_17",
++						  "txcmpl_18",
++						  "txcmpl_19",
++						  "txcmpl_20",
++						  "txcmpl_21",
++						  "txcmpl_22",
++						  "txcmpl_23",
++						  "txcmpl_24",
++						  "txcmpl_25",
++						  "txcmpl_26",
++						  "txcmpl_27",
++						  "txcmpl_28",
++						  "txcmpl_29",
++						  "txcmpl_30",
++						  "txcmpl_31",
++						  "rxdesc_20",
++						  "rxdesc_21",
++						  "rxdesc_22",
++						  "rxdesc_23",
++						  "misc";
+ 			};
+ 		};
+ 
+-		pcsuniphy0: ethernet-uniphy@7a00000 {
++		pcs0: ethernet-pcs@7a00000 {
+ 			#address-cells = <1>;
+ 			#size-cells = <0>;
+-			compatible = "qcom,ipq9574-uniphy";
++			compatible = "qcom,ipq9574-pcs";
+ 			reg = <0x7a00000 0x10000>;
+ 			clocks = <&gcc GCC_UNIPHY0_SYS_CLK>,
+ 				 <&gcc GCC_UNIPHY0_AHB_CLK>;
+ 			clock-names = "sys",
+ 				      "ahb";
+-			resets = <&gcc GCC_UNIPHY0_SYS_RESET>,
+-				 <&gcc GCC_UNIPHY0_AHB_RESET>,
+-				 <&gcc GCC_UNIPHY0_XPCS_RESET>;
+-			reset-names = "sys",
+-				      "ahb",
+-				      "xpcs";
++			resets = <&gcc GCC_UNIPHY0_XPCS_RESET>;
+ 			#clock-cells = <1>;
+ 			clock-output-names = "uniphy0_nss_rx_clk",
+ 					     "uniphy0_nss_tx_clk";
++			status = "disabled";
+ 
+-			pcsuniphy0_ch0: uniphy-ch@0 {
++			pcs0_ch0: pcs-ch@0 {
+ 				reg = <0>;
+-				clocks = <&nsscc NSS_CC_UNIPHY_PORT1_RX_CLK>,
+-					 <&nsscc NSS_CC_UNIPHY_PORT1_TX_CLK>;
+-				clock-names = "ch_rx",
+-					      "ch_tx";
++				status = "disabled";
+ 			};
+ 
+-			pcsuniphy0_ch1: uniphy-ch@1 {
++			pcs0_ch1: pcs-ch@1 {
+ 				reg = <1>;
+-				clocks = <&nsscc NSS_CC_UNIPHY_PORT2_RX_CLK>,
+-					 <&nsscc NSS_CC_UNIPHY_PORT2_TX_CLK>;
+-				clock-names = "ch_rx",
+-					      "ch_tx";
++				status = "disabled";
+ 			};
+ 
+-			pcsuniphy0_ch2: uniphy-ch@2 {
++			pcs0_ch2: pcs-ch@2 {
+ 				reg = <2>;
+-				clocks = <&nsscc NSS_CC_UNIPHY_PORT3_RX_CLK>,
+-					 <&nsscc NSS_CC_UNIPHY_PORT3_TX_CLK>;
+-				clock-names = "ch_rx",
+-					      "ch_tx";
++				status = "disabled";
+ 			};
+ 
+-			pcsuniphy0_ch3: uniphy-ch@3 {
++			pcs0_ch3: pcs-ch@3 {
+ 				reg = <3>;
+-				clocks = <&nsscc NSS_CC_UNIPHY_PORT4_RX_CLK>,
+-					 <&nsscc NSS_CC_UNIPHY_PORT4_TX_CLK>;
+-				clock-names = "ch_rx",
+-					      "ch_tx";
++				status = "disabled";
++			};
++
++			pcs0_ch4: pcs-ch@4 {
++				reg = <4>;
++				status = "disabled";
+ 			};
+ 		};
+ 
+-		pcsuniphy1: ethernet-uniphy@7a10000 {
++		pcs1: ethernet-pcs@7a10000 {
+ 			#address-cells = <1>;
+ 			#size-cells = <0>;
+-			compatible = "qcom,ipq9574-uniphy";
++			compatible = "qcom,ipq9574-pcs";
+ 			reg = <0x7a10000 0x10000>;
+ 			clocks = <&gcc GCC_UNIPHY1_SYS_CLK>,
+ 				 <&gcc GCC_UNIPHY1_AHB_CLK>;
+ 			clock-names = "sys",
+ 				      "ahb";
+-			resets = <&gcc GCC_UNIPHY1_SYS_RESET>,
+-				 <&gcc GCC_UNIPHY1_AHB_RESET>,
+-				 <&gcc GCC_UNIPHY1_XPCS_RESET>;
+-			reset-names = "sys",
+-				      "ahb",
+-				      "xpcs";
+ 			#clock-cells = <1>;
++			resets = <&gcc GCC_UNIPHY1_XPCS_RESET>;
+ 			clock-output-names = "uniphy1_nss_rx_clk",
+ 					     "uniphy1_nss_tx_clk";
++			status = "disabled";
+ 
+-			pcsuniphy1_ch0: uniphy-ch@0 {
++			pcs1_ch0: pcs-ch@0 {
+ 				reg = <0>;
+-				clocks = <&nsscc NSS_CC_UNIPHY_PORT5_RX_CLK>,
+-					 <&nsscc NSS_CC_UNIPHY_PORT5_TX_CLK>;
+-				clock-names = "ch_rx",
+-					      "ch_tx";
++				status = "disabled";
+ 			};
+ 		};
+ 
+-		pcsuniphy2: ethernet-uniphy@7a20000 {
++		pcs2: ethernet-pcs@7a20000 {
+ 			#address-cells = <1>;
+ 			#size-cells = <0>;
+-			compatible = "qcom,ipq9574-uniphy";
++			compatible = "qcom,ipq9574-pcs";
+ 			reg = <0x7a20000 0x10000>;
+ 			clocks = <&gcc GCC_UNIPHY2_SYS_CLK>,
+ 				 <&gcc GCC_UNIPHY2_AHB_CLK>;
+ 			clock-names = "sys",
+ 				      "ahb";
+-			resets = <&gcc GCC_UNIPHY2_SYS_RESET>,
+-				 <&gcc GCC_UNIPHY2_AHB_RESET>,
+-				 <&gcc GCC_UNIPHY2_XPCS_RESET>;
+-			reset-names = "sys",
+-				      "ahb",
+-				      "xpcs";
++			resets = <&gcc GCC_UNIPHY2_XPCS_RESET>;
+ 			#clock-cells = <1>;
+ 			clock-output-names = "uniphy2_nss_rx_clk",
+ 					     "uniphy2_nss_tx_clk";
++			status = "disabled";
+ 
+-			pcsuniphy2_ch0: uniphy-ch@0 {
++			pcs2_ch0: pcs-ch@0 {
+ 				reg = <0>;
+-				clocks = <&nsscc NSS_CC_UNIPHY_PORT6_RX_CLK>,
+-					 <&nsscc NSS_CC_UNIPHY_PORT6_TX_CLK>;
+-				clock-names = "ch_rx",
+-					      "ch_tx";
++				status = "disabled";
+ 			};
+ 		};
+ 	};
+-- 
+2.34.1
+
