@@ -1,0 +1,43 @@
+From 662c50be2597909500aa3823afd2721c5833d52c Mon Sep 17 00:00:00 2001
+From: Luo Jie <quic_luoj@quicinc.com>
+Date: Fri, 28 Mar 2025 15:59:18 +0800
+Subject: [PATCH 19/44] clk: qcom: ipq5424: Enable some NSS NoC clocks to use
+ icc-clk
+
+Add few NSS NoC clocks using the icc-clk framework to create
+paths and network subsystem can be connected to these NoCs.
+
+Also update to use the expected icc_first_node_id to be used for
+registering icc clocks.
+
+Change-Id: I7629c86fa87a185b20f8591e8cd91ffb2a48296c
+Signed-off-by: Luo Jie <quic_luoj@quicinc.com>
+---
+ drivers/clk/qcom/gcc-ipq5424.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/clk/qcom/gcc-ipq5424.c b/drivers/clk/qcom/gcc-ipq5424.c
+index c7e21cfa7..033fe0eb4 100644
+--- a/drivers/clk/qcom/gcc-ipq5424.c
++++ b/drivers/clk/qcom/gcc-ipq5424.c
+@@ -3250,6 +3250,9 @@ static const struct qcom_icc_hws_data icc_ipq5424_hws[] = {
+ 	{ MASTER_ANOC_PCIE3, SLAVE_ANOC_PCIE3, GCC_ANOC_PCIE3_2LANE_M_CLK },
+ 	{ MASTER_CNOC_PCIE3, SLAVE_CNOC_PCIE3, GCC_CNOC_PCIE3_2LANE_S_CLK },
+ 	{ MASTER_CNOC_USB, SLAVE_CNOC_USB, GCC_CNOC_USB_CLK },
++	{ MASTER_NSSNOC_NSSCC, SLAVE_NSSNOC_NSSCC, GCC_NSSNOC_NSSCC_CLK },
++	{ MASTER_NSSNOC_SNOC_0, SLAVE_NSSNOC_SNOC_0, GCC_NSSNOC_SNOC_CLK },
++	{ MASTER_NSSNOC_SNOC_1, SLAVE_NSSNOC_SNOC_1, GCC_NSSNOC_SNOC_1_CLK },
+ };
+ 
+ static const struct of_device_id gcc_ipq5424_match_table[] = {
+@@ -3284,6 +3287,7 @@ static const struct qcom_cc_desc gcc_ipq5424_desc = {
+ 	.num_clk_hws = ARRAY_SIZE(gcc_ipq5424_hws),
+ 	.icc_hws = (struct qcom_icc_hws_data *)icc_ipq5424_hws,
+ 	.num_icc_hws = ARRAY_SIZE(icc_ipq5424_hws),
++	.icc_first_node_id = IPQ_APPS_ID,
+ };
+ 
+ static int gcc_ipq5424_probe(struct platform_device *pdev)
+-- 
+2.34.1
+

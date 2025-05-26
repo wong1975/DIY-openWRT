@@ -1,0 +1,26 @@
+From db050d397f677409dd817185be44e58c03493f22 Mon Sep 17 00:00:00 2001
+From: Luo Jie <quic_luoj@quicinc.com>
+Date: Mon, 12 May 2025 20:45:31 +0800
+Subject: [PATCH 24/44] driver: clk: nsscc-ipq5424: Fix compile issue
+
+Signed-off-by: Luo Jie <quic_luoj@quicinc.com>
+---
+ drivers/clk/qcom/nsscc-ipq5424.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/clk/qcom/nsscc-ipq5424.c b/drivers/clk/qcom/nsscc-ipq5424.c
+index 483a5f713..b2b3d4c8d 100644
+--- a/drivers/clk/qcom/nsscc-ipq5424.c
++++ b/drivers/clk/qcom/nsscc-ipq5424.c
+@@ -1268,7 +1268,7 @@ static const struct regmap_config nss_cc_ipq5424_regmap_config = {
+ 	.fast_io = true,
+ };
+ 
+-static const struct qcom_icc_hws_data icc_ipq5424_nss_hws[] = {
++static struct qcom_icc_hws_data icc_ipq5424_nss_hws[] = {
+ 	{ MASTER_NSSNOC_PPE, SLAVE_NSSNOC_PPE, NSS_CC_NSSNOC_PPE_CLK },
+ 	{ MASTER_NSSNOC_PPE_CFG, SLAVE_NSSNOC_PPE_CFG, NSS_CC_NSSNOC_PPE_CFG_CLK },
+ 	{ MASTER_NSSNOC_NSS_CSR, SLAVE_NSSNOC_NSS_CSR, NSS_CC_NSSNOC_NSS_CSR_CLK },
+-- 
+2.34.1
+

@@ -1,0 +1,39 @@
+From 8ab24e5d92c96694d9242119dde4ae855a0d5189 Mon Sep 17 00:00:00 2001
+From: Luo Jie <quic_luoj@quicinc.com>
+Date: Wed, 13 Mar 2024 16:48:17 +0800
+Subject: [PATCH 03/44] dt-bindings: net: dsa: qca8k: add qca8386 support
+
+QCA8386 is six-port multi-gigabit ethernet swith, which includes
+two PCS, PCS can work on SGMII or 2500BASE-X.
+
+QCA8386 integrates an internal clock controller that supplies the
+clocks and resets to the PHY, PCS and whole chip package, these
+clocks need to be configured the correct rate according to the
+link speed.
+
+Signed-off-by: Luo Jie <quic_luoj@quicinc.com>
+---
+ Documentation/devicetree/bindings/net/dsa/qca8k.yaml | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/Documentation/devicetree/bindings/net/dsa/qca8k.yaml b/Documentation/devicetree/bindings/net/dsa/qca8k.yaml
+index df64eebeb..13e8a18ce 100644
+--- a/Documentation/devicetree/bindings/net/dsa/qca8k.yaml
++++ b/Documentation/devicetree/bindings/net/dsa/qca8k.yaml
+@@ -29,11 +29,13 @@ properties:
+           - qca,qca8328
+           - qca,qca8334
+           - qca,qca8337
++          - qca,qca8386
+     description: |
+       qca,qca8328: referenced as AR8328(N)-AK1(A/B) QFN 176 pin package
+       qca,qca8327: referenced as AR8327(N)-AL1A DR-QFN 148 pin package
+       qca,qca8334: referenced as QCA8334-AL3C QFN 88 pin package
+       qca,qca8337: referenced as QCA8337N-AL3(B/C) DR-QFN 148 pin package
++      qca,qca8386: referenced as QCA8386 DR-QFN 172 package
+ 
+   reg:
+     maxItems: 1
+-- 
+2.34.1
+

@@ -1,0 +1,36 @@
+From 7c3a951559d5c7f8cecca2fdcafca27ffdc4ca64 Mon Sep 17 00:00:00 2001
+From: Luo Jie <quic_luoj@quicinc.com>
+Date: Tue, 13 May 2025 00:33:51 +0800
+Subject: [PATCH 42/44] arm64: dts: qcom: Fix PCS dts compile issue
+
+Signed-off-by: Luo Jie <quic_luoj@quicinc.com>
+---
+ arch/arm64/boot/dts/qcom/ipq9574.dtsi | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/ipq9574.dtsi b/arch/arm64/boot/dts/qcom/ipq9574.dtsi
+index 0b8741d69..b3565c1d1 100644
+--- a/arch/arm64/boot/dts/qcom/ipq9574.dtsi
++++ b/arch/arm64/boot/dts/qcom/ipq9574.dtsi
+@@ -1244,12 +1244,12 @@ nsscc: clock-controller@39b00000 {
+ 				 <&cmn_pll NSS_1200MHZ_CLK>,
+ 				 <&cmn_pll PPE_353MHZ_CLK>,
+ 				 <&gcc GPLL0_OUT_AUX>,
+-				 <&pcsuniphy0 UNIPHY_NSS_RX_CLK>,
+-				 <&pcsuniphy0 UNIPHY_NSS_TX_CLK>,
+-				 <&pcsuniphy1 UNIPHY_NSS_RX_CLK>,
+-				 <&pcsuniphy1 UNIPHY_NSS_TX_CLK>,
+-				 <&pcsuniphy2 UNIPHY_NSS_RX_CLK>,
+-				 <&pcsuniphy2 UNIPHY_NSS_TX_CLK>,
++				 <&pcs0 UNIPHY_NSS_RX_CLK>,
++				 <&pcs0 UNIPHY_NSS_TX_CLK>,
++				 <&pcs1 UNIPHY_NSS_RX_CLK>,
++				 <&pcs1 UNIPHY_NSS_TX_CLK>,
++				 <&pcs2 UNIPHY_NSS_RX_CLK>,
++				 <&pcs2 UNIPHY_NSS_TX_CLK>,
+ 				 <&gcc GCC_NSSNOC_NSSCC_CLK>,
+ 				 <&gcc GCC_NSSNOC_SNOC_CLK>,
+ 				 <&gcc GCC_NSSNOC_SNOC_1_CLK>,
+-- 
+2.34.1
+

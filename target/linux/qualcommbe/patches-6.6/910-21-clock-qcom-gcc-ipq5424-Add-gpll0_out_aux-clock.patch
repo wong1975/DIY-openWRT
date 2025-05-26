@@ -1,0 +1,59 @@
+From 736c1280060096449886ad70fa3ea80f45b71d8c Mon Sep 17 00:00:00 2001
+From: Luo Jie <quic_luoj@quicinc.com>
+Date: Wed, 12 Feb 2025 13:17:15 +0800
+Subject: [PATCH 21/44] clock: qcom: gcc-ipq5424: Add gpll0_out_aux clock
+
+The clock gpll0_out_aux acts as the parent clocks for some
+NSS (Netowrk Subsystem) clocks.
+
+Change-Id: Icf407d010b5fd01016cb904e9b47e13e5705b8f4
+Signed-off-by: Luo Jie <quic_luoj@quicinc.com>
+---
+ drivers/clk/qcom/gcc-ipq5424.c | 17 ++++++++++++++++-
+ 1 file changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/clk/qcom/gcc-ipq5424.c b/drivers/clk/qcom/gcc-ipq5424.c
+index 033fe0eb4..9ec85e0b1 100644
+--- a/drivers/clk/qcom/gcc-ipq5424.c
++++ b/drivers/clk/qcom/gcc-ipq5424.c
+@@ -1,7 +1,7 @@
+ // SPDX-License-Identifier: GPL-2.0
+ /*
+  * Copyright (c) 2018,2020 The Linux Foundation. All rights reserved.
+- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
++ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+  */
+ 
+ #include <linux/clk-provider.h>
+@@ -79,6 +79,20 @@ static struct clk_fixed_factor gpll0_div2 = {
+ 	},
+ };
+ 
++static struct clk_alpha_pll_postdiv gpll0_out_aux = {
++	.offset = 0x20000,
++	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_DEFAULT],
++	.width = 4,
++	.clkr.hw.init = &(const struct clk_init_data) {
++		.name = "gpll0_out_aux",
++		.parent_hws = (const struct clk_hw *[]) {
++			&gpll0.clkr.hw
++		},
++		.num_parents = 1,
++		.ops = &clk_alpha_pll_postdiv_ro_ops,
++	},
++};
++
+ static struct clk_alpha_pll gpll2 = {
+ 	.offset = 0x21000,
+ 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_NSS_HUAYRA],
+@@ -2934,6 +2948,7 @@ static struct clk_regmap *gcc_ipq5424_clocks[] = {
+ 	[GPLL2] = &gpll2.clkr,
+ 	[GPLL2_OUT_MAIN] = &gpll2_out_main.clkr,
+ 	[GPLL4] = &gpll4.clkr,
++	[GPLL0_OUT_AUX] = &gpll0_out_aux.clkr,
+ };
+ 
+ static const struct qcom_reset_map gcc_ipq5424_resets[] = {
+-- 
+2.34.1
+
