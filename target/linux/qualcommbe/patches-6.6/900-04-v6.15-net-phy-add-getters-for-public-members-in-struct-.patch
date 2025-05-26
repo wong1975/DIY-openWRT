@@ -1,0 +1,66 @@
+From 974a1de08da4321bca35948b6069689c4b6dbf96 Mon Sep 17 00:00:00 2001
+From: Heiner Kallweit <hkallweit1@gmail.com>
+Date: Mon, 3 Mar 2025 21:15:09 +0100
+Subject: [PATCH v1 4/9] net: phy: add getters for public members in struct
+ phy_package_shared
+
+Add getters for public members, this prepares for making struct
+phy_package_shared private to phylib. Declare the getters in a new header
+file phylib.h, which will be used by PHY drivers only.
+
+Signed-off-by: Heiner Kallweit <hkallweit1@gmail.com>
+---
+ drivers/net/phy/phy_package.c | 14 ++++++++++++++
+ drivers/net/phy/phylib.h      | 15 +++++++++++++++
+ 2 files changed, 29 insertions(+)
+ create mode 100644 drivers/net/phy/phylib.h
+
+diff --git a/drivers/net/phy/phy_package.c b/drivers/net/phy/phy_package.c
+index 260469f02..873420e58 100644
+--- a/drivers/net/phy/phy_package.c
++++ b/drivers/net/phy/phy_package.c
+@@ -6,6 +6,20 @@
+ #include <linux/of.h>
+ #include <linux/phy.h>
+ 
++#include "phylib.h"
++
++struct device_node *phy_package_get_node(struct phy_device *phydev)
++{
++	return phydev->shared->np;
++}
++EXPORT_SYMBOL_GPL(phy_package_get_node);
++
++void *phy_package_get_priv(struct phy_device *phydev)
++{
++	return phydev->shared->priv;
++}
++EXPORT_SYMBOL_GPL(phy_package_get_priv);
++
+ /**
+  * phy_package_join - join a common PHY group
+  * @phydev: target phy_device struct
+diff --git a/drivers/net/phy/phylib.h b/drivers/net/phy/phylib.h
+new file mode 100644
+index 000000000..a42e1fc07
+--- /dev/null
++++ b/drivers/net/phy/phylib.h
+@@ -0,0 +1,15 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later */
++/*
++ * phylib header
++ */
++
++#ifndef __PHYLIB_H
++#define __PHYLIB_H
++
++struct device_node;
++struct phy_device;
++
++struct device_node *phy_package_get_node(struct phy_device *phydev);
++void *phy_package_get_priv(struct phy_device *phydev);
++
++#endif /* __PHYLIB_H */
+-- 
+2.34.1
+
