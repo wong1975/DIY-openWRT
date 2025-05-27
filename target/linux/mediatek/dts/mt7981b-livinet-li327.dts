@@ -47,45 +47,19 @@
 
 	gpio-leds {
 		compatible = "gpio-leds";
-
-		led-0 {
-			label = "red:d8";
-			gpios = <&pio 6 GPIO_ACTIVE_LOW>;
-		};
-
-		led-1 {
-			label = "blue:internet";
-			gpios = <&pio 7 GPIO_ACTIVE_LOW>;
-		};
-
 		running_led: led-2 {
 			label = "blue:running";
 			gpios = <&pio 9 GPIO_ACTIVE_LOW>;
 		};
 
 		upgrade_led: led-3 {
-			label = "green:upgrade";
+			label = "green:wan";
 			gpios = <&pio 10 GPIO_ACTIVE_LOW>;
 		};
 
 		boot_led: led-4 {
 			label = "red:boot";
 			gpios = <&pio 11 GPIO_ACTIVE_LOW>;
-		};
-
-		led-6 {
-			label = "blue:d7";
-			gpios = <&pio 12 GPIO_ACTIVE_LOW>;
-		};
-
-		led-7 {
-			label = "blue:wlan2g";
-			gpios = <&pio 34 GPIO_ACTIVE_LOW>;
-		};
-
-		led-8 {
-			label = "blue:wlan5g";
-			gpios = <&pio 35 GPIO_ACTIVE_LOW>;
 		};
 	};
 };
