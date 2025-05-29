@@ -26,6 +26,9 @@ ramips_setup_interfaces()
 	xiaomi,mi-router-cr6608|\
 	xiaomi,mi-router-cr6609|\
 	xiaomi,redmi-router-ac2100|\
+	livinet,li266|\
+	livinet,li172|\
+	livinet,li172v2|\
 	z-router,zr-2660|\
 	zyxel,wsm20)
 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3" "wan"
@@ -309,6 +312,14 @@ ramips_setup_macs()
 	netgear,wax202)
 		lan_mac=$(mtd_get_mac_ascii Config mac)
 		wan_mac=$(macaddr_add "$lan_mac" 1)
+		label_mac=$lan_mac
+		;;
+	livinet,li266|\
+	livinet,li172|\
+	livinet,li172v2)\
+		label_mac=$(mtd_get_mac_binary Factory 0x4)
+		wan_mac=$label_mac
+		lan_mac=$(macaddr_add "$lan_mac" 1)
 		label_mac=$lan_mac
 		;;
 	yuncore,ax820)
