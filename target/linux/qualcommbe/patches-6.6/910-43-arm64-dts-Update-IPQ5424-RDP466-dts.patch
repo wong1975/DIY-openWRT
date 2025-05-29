@@ -1,0 +1,70 @@
+From 5cdfd6cc2049888fa46959c8e14c602f561748cc Mon Sep 17 00:00:00 2001
+From: Luo Jie <quic_luoj@quicinc.com>
+Date: Mon, 12 May 2025 22:48:41 +0800
+Subject: [PATCH 43/44] arm64: dts: Update IPQ5424-RDP466 dts
+
+Signed-off-by: Luo Jie <quic_luoj@quicinc.com>
+---
+ arch/arm64/boot/dts/qcom/ipq5424-rdp466.dts | 39 +++++++++++----------
+ 1 file changed, 21 insertions(+), 18 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/ipq5424-rdp466.dts b/arch/arm64/boot/dts/qcom/ipq5424-rdp466.dts
+index 875c8f5e3..e0a8c3d8b 100644
+--- a/arch/arm64/boot/dts/qcom/ipq5424-rdp466.dts
++++ b/arch/arm64/boot/dts/qcom/ipq5424-rdp466.dts
+@@ -58,6 +58,27 @@ vreg_misc_0p925: regulator-usb-0p925 {
+ 		regulator-always-on;
+ 		regulator-name = "vdd_core_usb";
+ 	};
++};
++
++&mdio {
++	clock-frequency = <6250000>;
++	status = "okay";
++
++	phy0: ethernet-phy@8 {
++		compatible ="ethernet-phy-ieee802.3-c45";
++		reg = <8>;
++		reset-gpios = <&tlmm 40 GPIO_ACTIVE_LOW>;
++		reset-assert-us = <100000>;
++		reset-deassert-us = <100000>;
++	};
++
++	phy1: ethernet-phy@c {
++		compatible ="ethernet-phy-ieee802.3-c45";
++		reg = <0xc>;
++		reset-gpios = <&tlmm 28 GPIO_ACTIVE_LOW>;
++		reset-assert-us = <100000>;
++		reset-deassert-us = <100000>;
++	};
+ 
+ 	ethernet-phy-package@1 {
+ 		compatible = "qcom,qca8084-package";
+@@ -489,24 +510,6 @@ &usb3 {
+ 	status = "okay";
+ };
+ 
+-&mdio {
+-	phy0: ethernet-phy@8 {
+-		compatible ="ethernet-phy-ieee802.3-c45";
+-		reg = <8>;
+-		reset-gpios = <&tlmm 40 GPIO_ACTIVE_LOW>;
+-		reset-assert-us = <100000>;
+-		reset-deassert-us = <100000>;
+-	};
+-
+-	phy1: ethernet-phy@c {
+-		compatible ="ethernet-phy-ieee802.3-c45";
+-		reg = <0xc>;
+-		reset-gpios = <&tlmm 28 GPIO_ACTIVE_LOW>;
+-		reset-assert-us = <100000>;
+-		reset-deassert-us = <100000>;
+-	};
+-};
+-
+ /*
+  * The bootstrap pins for the board select the XO clock frequency that
+  * supports 48 MHZ, 96 MHZ or 192 MHZ. This setting automatically
+-- 
+2.34.1
+

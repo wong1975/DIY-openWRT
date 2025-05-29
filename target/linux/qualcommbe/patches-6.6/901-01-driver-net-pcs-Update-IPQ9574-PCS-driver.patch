@@ -1,0 +1,2451 @@
+From e3a1660f170bbd7c523878c5ffe08c4f120acb06 Mon Sep 17 00:00:00 2001
+From: Luo Jie <quic_luoj@quicinc.com>
+Date: Thu, 22 May 2025 11:09:27 +0800
+Subject: [PATCH 1/3] driver: net: pcs: Update IPQ9574 PCS driver
+
+Update the driver file as pcs-qcom-ipq9574.c and CONFIG as
+PCS_QCOM_IPQ9574.
+
+Signed-off-by: Luo Jie <quic_luoj@quicinc.com>
+---
+ .../bindings/net/pcs/qcom,ipq9574-pcs.yaml    |  190 +++
+ drivers/net/pcs/Kconfig                       |   19 +-
+ drivers/net/pcs/Makefile                      |    2 +-
+ drivers/net/pcs/pcs-qcom-ipq-uniphy.c         | 1238 -----------------
+ drivers/net/pcs/pcs-qcom-ipq9574.c            |  868 ++++++++++++
+ include/dt-bindings/net/qcom,ipq9574-pcs.h    |   15 +
+ include/linux/pcs/pcs-qcom-ipq-uniphy.h       |   13 -
+ include/linux/pcs/pcs-qcom-ipq9574.h          |   15 +
+ 8 files changed, 1098 insertions(+), 1262 deletions(-)
+ create mode 100644 Documentation/devicetree/bindings/net/pcs/qcom,ipq9574-pcs.yaml
+ delete mode 100644 drivers/net/pcs/pcs-qcom-ipq-uniphy.c
+ create mode 100644 drivers/net/pcs/pcs-qcom-ipq9574.c
+ create mode 100644 include/dt-bindings/net/qcom,ipq9574-pcs.h
+ delete mode 100644 include/linux/pcs/pcs-qcom-ipq-uniphy.h
+ create mode 100644 include/linux/pcs/pcs-qcom-ipq9574.h
+
+diff --git a/Documentation/devicetree/bindings/net/pcs/qcom,ipq9574-pcs.yaml b/Documentation/devicetree/bindings/net/pcs/qcom,ipq9574-pcs.yaml
+new file mode 100644
+index 000000000..74573c28d
+--- /dev/null
++++ b/Documentation/devicetree/bindings/net/pcs/qcom,ipq9574-pcs.yaml
+@@ -0,0 +1,190 @@
++# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++%YAML 1.2
++---
++$id: http://devicetree.org/schemas/net/pcs/qcom,ipq9574-pcs.yaml#
++$schema: http://devicetree.org/meta-schemas/core.yaml#
++
++title: Ethernet PCS for Qualcomm IPQ9574 SoC
++
++maintainers:
++  - Lei Wei <quic_leiwei@quicinc.com>
++
++description:
++  The UNIPHY hardware blocks in the Qualcomm IPQ SoC include PCS and SerDes
++  functions. They enable connectivity between the Ethernet MAC inside the
++  PPE (packet processing engine) and external Ethernet PHY/switch. There are
++  three UNIPHY instances in IPQ9574 SoC which provide PCS functions to the
++  six Ethernet ports.
++
++  For SGMII (1Gbps PHY) or 2500BASE-X (2.5Gbps PHY) interface modes, the PCS
++  function is enabled by using the PCS block inside UNIPHY. For USXGMII (10Gbps
++  PHY), the XPCS block in UNIPHY is used.
++
++  The SerDes provides 125M (1Gbps mode) or 312.5M (2.5Gbps and 10Gbps modes)
++  RX and TX clocks to the NSSCC (Networking Sub System Clock Controller). The
++  NSSCC divides these clocks and generates the MII RX and TX clocks to each
++  of the MII interfaces between the PCS and MAC, as per the link speeds and
++  interface modes.
++
++  Different IPQ SoC may support different number of UNIPHYs (PCSes) since the
++  number of ports and their capabilities can be different between these SoCs
++
++  Below diagram depicts the UNIPHY (PCS) connections for an IPQ9574 SoC based
++  board. In this example, the PCS0 has four GMIIs/XGMIIs, which can connect
++  with four MACs to support QSGMII (4 x 1Gbps) or 10G_QXGMII (4 x 2.5Gbps)
++  interface modes.
++
++  -           +-------+ +---------+  +-------------------------+
++    +---------+CMN PLL| |  GCC    |  |   NSSCC (Divider)       |
++    |         +----+--+ +----+----+  +--+-------+--------------+
++    |              |         |          ^       |
++    |       31.25M |  SYS/AHB|clk  RX/TX|clk    +------------+
++    |       ref clk|         |          |       |            |
++    |              |         v          | MII RX|TX clk   MAC| RX/TX clk
++    |25/50M     +--+---------+----------+-------+---+      +-+---------+
++    |ref clk    |  |   +----------------+       |   |      | |     PPE |
++    v           |  |   |     UNIPHY0            V   |      | V         |
++  +-------+     |  v   |       +-----------+ (X)GMII|      |           |
++  |       |     |  +---+---+   |           |--------|------|-- MAC0    |
++  |       |     |  |       |   |           | (X)GMII|      |           |
++  |  Quad |     |  |SerDes |   | PCS/XPCS  |--------|------|-- MAC1    |
++  |       +<----+  |       |   |           | (X)GMII|      |           |
++  |(X)GPHY|     |  |       |   |           |--------|------|-- MAC2    |
++  |       |     |  |       |   |           | (X)GMII|      |           |
++  |       |     |  +-------+   |           |--------|------|-- MAC3    |
++  +-------+     |              |           |        |      |           |
++                |              +-----------+        |      |           |
++                +-----------------------------------+      |           |
++                +--+---------+----------+-------+---+      |           |
++  +-------+     |            UNIPHY1                |      |           |
++  |       |     |              +-----------+        |      |           |
++  |(X)GPHY|     | +-------+    |           | (X)GMII|      |           |
++  |       +<----+ |SerDes |    | PCS/XPCS  |--------|------|- MAC4     |
++  |       |     | |       |    |           |        |      |           |
++  +-------+     | +-------+    |           |        |      |           |
++                |              +-----------+        |      |           |
++                +-----------------------------------+      |           |
++                +--+---------+----------+-------+---+      |           |
++  +-------+     |           UNIPHY2                 |      |           |
++  |       |     |              +-----------+        |      |           |
++  |(X)GPHY|     | +-------+    |           | (X)GMII|      |           |
++  |       +<----+ |SerDes |    | PCS/XPCS  |--------|------|- MAC5     |
++  |       |     | |       |    |           |        |      |           |
++  +-------+     | +-------+    |           |        |      |           |
++                |              +-----------+        |      |           |
++                +-----------------------------------+      +-----------+
++
++properties:
++  compatible:
++    enum:
++      - qcom,ipq9574-pcs
++
++  reg:
++    maxItems: 1
++
++  '#address-cells':
++    const: 1
++
++  '#size-cells':
++    const: 0
++
++  clocks:
++    items:
++      - description: System clock
++      - description: AHB clock needed for register interface access
++
++  clock-names:
++    items:
++      - const: sys
++      - const: ahb
++
++  '#clock-cells':
++    const: 1
++    description: See include/dt-bindings/net/qcom,ipq9574-pcs.h for constants
++
++patternProperties:
++  '^pcs-mii@[0-4]$':
++    type: object
++    description: PCS MII interface.
++
++    properties:
++      reg:
++        minimum: 0
++        maximum: 4
++        description: MII index
++
++      clocks:
++        items:
++          - description: PCS MII RX clock
++          - description: PCS MII TX clock
++
++      clock-names:
++        items:
++          - const: rx
++          - const: tx
++
++    required:
++      - reg
++      - clocks
++      - clock-names
++
++    additionalProperties: false
++
++required:
++  - compatible
++  - reg
++  - '#address-cells'
++  - '#size-cells'
++  - clocks
++  - clock-names
++  - '#clock-cells'
++
++additionalProperties: false
++
++examples:
++  - |
++    #include <dt-bindings/clock/qcom,ipq9574-gcc.h>
++
++    ethernet-pcs@7a00000 {
++        compatible = "qcom,ipq9574-pcs";
++        reg = <0x7a00000 0x10000>;
++        #address-cells = <1>;
++        #size-cells = <0>;
++        clocks = <&gcc GCC_UNIPHY0_SYS_CLK>,
++                 <&gcc GCC_UNIPHY0_AHB_CLK>;
++        clock-names = "sys",
++                      "ahb";
++        #clock-cells = <1>;
++
++        pcs-mii@0 {
++            reg = <0>;
++            clocks = <&nsscc 116>,
++                     <&nsscc 117>;
++            clock-names = "rx",
++                          "tx";
++        };
++
++        pcs-mii@1 {
++            reg = <1>;
++            clocks = <&nsscc 118>,
++                     <&nsscc 119>;
++            clock-names = "rx",
++                          "tx";
++        };
++
++        pcs-mii@2 {
++            reg = <2>;
++            clocks = <&nsscc 120>,
++                     <&nsscc 121>;
++            clock-names = "rx",
++                          "tx";
++        };
++
++        pcs-mii@3 {
++            reg = <3>;
++            clocks = <&nsscc 122>,
++                     <&nsscc 123>;
++            clock-names = "rx",
++                          "tx";
++        };
++    };
+diff --git a/drivers/net/pcs/Kconfig b/drivers/net/pcs/Kconfig
+index dd0a3157c..c4401cb43 100644
+--- a/drivers/net/pcs/Kconfig
++++ b/drivers/net/pcs/Kconfig
+@@ -36,6 +36,15 @@ config PCS_MTK_USXGMII
+ 	  1000Base-X, 2500Base-X and Cisco SGMII are supported on the same
+ 	  differential pairs via an embedded LynxI PHY.
+ 
++config PCS_QCOM_IPQ9574
++	tristate "Qualcomm IPQ9574 PCS"
++	depends on OF && (ARCH_QCOM || COMPILE_TEST)
++	depends on HAS_IOMEM && COMMON_CLK
++	help
++	  This module provides driver for UNIPHY PCS available on Qualcomm
++	  IPQ9574 SoC. The UNIPHY PCS supports both PCS and XPCS functions
++	  to support different interface modes for MAC to PHY connections.
++
+ config PCS_RZN1_MIIC
+ 	tristate "Renesas RZ/N1 MII converter"
+ 	depends on OF && (ARCH_RZN1 || COMPILE_TEST)
+@@ -44,14 +53,4 @@ config PCS_RZN1_MIIC
+ 	  on RZ/N1 SoCs. This PCS converts MII to RMII/RGMII or can be set in
+ 	  pass-through mode for MII.
+ 
+-config PCS_QCOM_IPQ_UNIPHY
+-	tristate "Qualcomm IPQ UNIPHY PCS driver"
+-	depends on OF && (ARCH_QCOM || COMPILE_TEST)
+-	depends on HAS_IOMEM
+-	help
+-	  This module provides PCS driver for Qualcomm IPQ UNIPHY that is
+-	  available on Qualcomm IPQ SoCs. The UNIPHY provides both PCS and XPCS
+-	  functions to support different interface modes for MAC to PHY connections.
+-	  These modes help to support various combination of ethernet switch/PHY on
+-	  IPQ SoC based boards.
+ endmenu
+diff --git a/drivers/net/pcs/Makefile b/drivers/net/pcs/Makefile
+index 4da79c02f..0b68bc809 100644
+--- a/drivers/net/pcs/Makefile
++++ b/drivers/net/pcs/Makefile
+@@ -6,6 +6,6 @@ pcs_xpcs-$(CONFIG_PCS_XPCS)	:= pcs-xpcs.o pcs-xpcs-nxp.o pcs-xpcs-wx.o
+ obj-$(CONFIG_PCS_XPCS)		+= pcs_xpcs.o
+ obj-$(CONFIG_PCS_LYNX)		+= pcs-lynx.o
+ obj-$(CONFIG_PCS_MTK_LYNXI)	+= pcs-mtk-lynxi.o
++obj-$(CONFIG_PCS_QCOM_IPQ9574)	+= pcs-qcom-ipq9574.o
+ obj-$(CONFIG_PCS_RZN1_MIIC)	+= pcs-rzn1-miic.o
+ obj-$(CONFIG_PCS_MTK_USXGMII)	+= pcs-mtk-usxgmii.o
+-obj-$(CONFIG_PCS_QCOM_IPQ_UNIPHY)	+= pcs-qcom-ipq-uniphy.o
+diff --git a/drivers/net/pcs/pcs-qcom-ipq-uniphy.c b/drivers/net/pcs/pcs-qcom-ipq-uniphy.c
+deleted file mode 100644
+index 8883e2f78..000000000
+--- a/drivers/net/pcs/pcs-qcom-ipq-uniphy.c
++++ /dev/null
+@@ -1,1238 +0,0 @@
+-// SPDX-License-Identifier: GPL-2.0-only
+-/*
+- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+- *
+- */
+-
+-#include <linux/clk.h>
+-#include <linux/clk-provider.h>
+-#include <linux/device.h>
+-#include <linux/of.h>
+-#include <linux/of_platform.h>
+-#include <linux/pcs/pcs-qcom-ipq-uniphy.h>
+-#include <linux/phylink.h>
+-#include <linux/platform_device.h>
+-#include <linux/reset.h>
+-
+-/* Maximum PCS channel numbers, For PSGMII it has 5 channels */
+-#define PCS_MAX_CHANNELS		5
+-
+-#define PCS_CALIBRATION			0x1e0
+-#define PCS_CALIBRATION_DONE		BIT(7)
+-
+-#define PCS_MISC2			0x218
+-#define PCS_MISC2_MODE_MASK		GENMASK(6, 5)
+-#define PCS_MISC2_MODE_SGMII		FIELD_PREP(PCS_MISC2_MODE_MASK, 0x1)
+-#define PCS_MISC2_MODE_SGMII_PLUS	FIELD_PREP(PCS_MISC2_MODE_MASK, 0x2)
+-
+-#define PCS_MODE_CTRL			0x46c
+-#define PCS_MODE_SEL_MASK		GENMASK(12, 8)
+-#define PCS_MODE_SGMII			FIELD_PREP(PCS_MODE_SEL_MASK, 0x4)
+-#define PCS_MODE_QSGMII			FIELD_PREP(PCS_MODE_SEL_MASK, 0x1)
+-#define PCS_MODE_PSGMII			FIELD_PREP(PCS_MODE_SEL_MASK, 0x2)
+-#define PCS_MODE_SGMII_PLUS		FIELD_PREP(PCS_MODE_SEL_MASK, 0x8)
+-#define PCS_MODE_XPCS			FIELD_PREP(PCS_MODE_SEL_MASK, 0x10)
+-#define PCS_MODE_SGMII_CTRL_MASK	GENMASK(6, 4)
+-#define PCS_MODE_SGMII_CTRL_1000BASEX	FIELD_PREP(PCS_MODE_SGMII_CTRL_MASK, \
+-						   0x0)
+-#define PCS_MODE_AN_MODE		BIT(0)
+-
+-#define PCS_CHANNEL_CTRL(x)		(0x480 + 0x18 * (x))
+-#define PCS_CHANNEL_ADPT_RESET		BIT(11)
+-#define PCS_CHANNEL_FORCE_MODE		BIT(3)
+-#define PCS_CHANNEL_SPEED_MASK		GENMASK(2, 1)
+-#define PCS_CHANNEL_SPEED_1000		FIELD_PREP(PCS_CHANNEL_SPEED_MASK, 0x2)
+-#define PCS_CHANNEL_SPEED_100		FIELD_PREP(PCS_CHANNEL_SPEED_MASK, 0x1)
+-#define PCS_CHANNEL_SPEED_10		FIELD_PREP(PCS_CHANNEL_SPEED_MASK, 0x0)
+-
+-#define PCS_CHANNEL_STS(x)		(0x488 + 0x18 * (x))
+-#define PCS_CHANNEL_LINK_STS		BIT(7)
+-#define PCS_CHANNEL_STS_DUPLEX_FULL	BIT(6)
+-#define PCS_CHANNEL_STS_SPEED_MASK	GENMASK(5, 4)
+-#define PCS_CHANNEL_STS_SPEED_10	0
+-#define PCS_CHANNEL_STS_SPEED_100	1
+-#define PCS_CHANNEL_STS_SPEED_1000	2
+-#define PCS_CHANNEL_STS_PAUSE_TX_EN	BIT(1)
+-#define PCS_CHANNEL_STS_PAUSE_RX_EN	BIT(0)
+-
+-#define PCS_QP_USXG_OPTION		0x584
+-#define PCS_QP_USXG_GMII_SRC_XPCS	BIT(0)
+-
+-#define PCS_PLL_RESET			0x780
+-#define PCS_ANA_SW_RESET		BIT(6)
+-
+-#define XPCS_INDIRECT_ADDR		0x8000
+-#define XPCS_INDIRECT_AHB_ADDR		0x83fc
+-#define XPCS_INDIRECT_ADDR_H		GENMASK(20, 8)
+-#define XPCS_INDIRECT_ADDR_L		GENMASK(7, 0)
+-#define XPCS_INDIRECT_DATA_ADDR(reg)	(FIELD_PREP(GENMASK(15, 10), 0x20) | \
+-					 FIELD_PREP(GENMASK(9, 2), \
+-					 FIELD_GET(XPCS_INDIRECT_ADDR_L, reg)))
+-
+-#define XPCS_10GBASER_STS		0x30020
+-#define XPCS_10GBASER_LINK_STS		BIT(12)
+-
+-#define XPCS_DIG_CTRL			0x38000
+-#define XPCS_SOFT_RESET			BIT(15)
+-#define XPCS_USXG_ADPT_RESET		BIT(10)
+-#define XPCS_USXG_EN			BIT(9)
+-
+-#define XPCS_KR_CTRL			0x38007
+-#define XPCS_USXG_MODE_MASK		GENMASK(12, 10)
+-#define XPCS_10G_QXGMII_MODE		FIELD_PREP(XPCS_USXG_MODE_MASK, 0x5)
+-
+-#define XPCS_DIG_STS			0x3800a
+-#define XPCS_DIG_STS_AM_COUNT		GENMASK(14, 0)
+-
+-#define XPCS_CHANNEL_DIG_CTRL(x)	(0x1a8000 + 0x10000 * ((x) - 1))
+-#define XPCS_CHANNEL_USXG_ADPT_RESET	BIT(5)
+-
+-#define XPCS_MII_CTRL			0x1f0000
+-#define XPCS_CHANNEL_MII_CTRL(x)	(0x1a0000 + 0x10000 * ((x) - 1))
+-#define XPCS_MII_AN_EN			BIT(12)
+-#define XPCS_DUPLEX_FULL		BIT(8)
+-#define XPCS_SPEED_MASK			(BIT(13) | BIT(6) | BIT(5))
+-#define XPCS_SPEED_10000		(BIT(13) | BIT(6))
+-#define XPCS_SPEED_5000			(BIT(13) | BIT(5))
+-#define XPCS_SPEED_2500			BIT(5)
+-#define XPCS_SPEED_1000			BIT(6)
+-#define XPCS_SPEED_100			BIT(13)
+-#define XPCS_SPEED_10			0
+-
+-#define XPCS_MII_AN_CTRL		0x1f8001
+-#define XPCS_CHANNEL_MII_AN_CTRL(x)	(0x1a8001 + 0x10000 * ((x) - 1))
+-#define XPCS_MII_AN_8BIT		BIT(8)
+-
+-#define XPCS_MII_AN_INTR_STS		0x1f8002
+-#define XPCS_CHANNEL_MII_AN_INTR_STS(x)	(0x1a8002 + 0x10000 * ((x) - 1))
+-#define XPCS_USXG_AN_LINK_STS		BIT(14)
+-#define XPCS_USXG_AN_DUPLEX_FULL	BIT(13)
+-#define XPCS_USXG_AN_SPEED_MASK		GENMASK(12, 10)
+-#define XPCS_USXG_AN_SPEED_10		0
+-#define XPCS_USXG_AN_SPEED_100		1
+-#define XPCS_USXG_AN_SPEED_1000		2
+-#define XPCS_USXG_AN_SPEED_2500		4
+-#define XPCS_USXG_AN_SPEED_5000		5
+-#define XPCS_USXG_AN_SPEED_10000	3
+-
+-#define XPCS_XAUI_MODE_CTRL		0x1f8004
+-#define XPCS_CHANNEL_XAUI_MODE_CTRL(x)	(0x1a8004 + 0x10000 * ((x) - 1))
+-#define XPCS_TX_IPG_CHECK_DIS		BIT(0)
+-
+-/* UNIPHY PCS RAW clock ID */
+-enum {
+-	PCS_RAW_RX_CLK = 0,
+-	PCS_RAW_TX_CLK,
+-	PCS_RAW_CLK_MAX
+-};
+-
+-/* UNIPHY PCS raw clock */
+-struct ipq_unipcs_raw_clk {
+-	struct clk_hw hw;
+-	unsigned long rate;
+-};
+-
+-/* UNIPHY PCS clock ID */
+-enum {
+-	PCS_SYS_CLK,
+-	PCS_AHB_CLK,
+-	PCS_CLK_MAX
+-};
+-
+-/* UNIPHY PCS reset ID */
+-enum {
+-	PCS_SYS_RESET,
+-	PCS_AHB_RESET,
+-	XPCS_RESET,
+-	PCS_RESET_MAX
+-};
+-
+-/* UNIPHY PCS clock name */
+-static const char *const pcs_clock_name[PCS_CLK_MAX] = {
+-	"sys",
+-	"ahb",
+-};
+-
+-/* UNIPHY PCS reset name */
+-static const char *const pcs_reset_name[PCS_RESET_MAX] = {
+-	"sys",
+-	"ahb",
+-	"xpcs",
+-};
+-
+-/* UNIPHY PCS channel clock ID */
+-enum {
+-	PCS_CH_RX_CLK,
+-	PCS_CH_TX_CLK,
+-	PCS_CH_CLK_MAX
+-};
+-
+-/* UNIPHY PCS channel clock name */
+-static const char *const pcs_ch_clock_name[PCS_CH_CLK_MAX] = {
+-	"ch_rx",
+-	"ch_tx",
+-};
+-
+-/* UNIPHY PCS private data instance */
+-struct ipq_uniphy_pcs {
+-	void __iomem *base;
+-	struct device *dev;
+-	phy_interface_t interface;
+-	struct mutex shared_lock; /* Lock to protect shared config */
+-	spinlock_t reg_lock; /* Lock for register access */
+-	struct clk *clk[PCS_CLK_MAX];
+-	struct reset_control *reset[PCS_RESET_MAX];
+-	struct ipq_unipcs_raw_clk raw_clk[PCS_RAW_CLK_MAX];
+-};
+-
+-/* UNIPHY PCS channel private data instance */
+-struct ipq_uniphy_pcs_ch {
+-	struct ipq_uniphy_pcs *qunipcs;
+-	struct phylink_pcs pcs;
+-	int channel;
+-	struct clk *clk[PCS_CH_CLK_MAX];
+-};
+-
+-#define to_unipcs_raw_clk(_hw)		\
+-	container_of(_hw, struct ipq_unipcs_raw_clk, hw)
+-#define phylink_pcs_to_unipcs(_pcs)	\
+-	container_of(_pcs, struct ipq_uniphy_pcs_ch, pcs)
+-
+-static unsigned long ipq_unipcs_raw_clk_recalc_rate(struct clk_hw *hw,
+-						    unsigned long parent_rate)
+-{
+-	struct ipq_unipcs_raw_clk *raw_clk = to_unipcs_raw_clk(hw);
+-
+-	return raw_clk->rate;
+-}
+-
+-static int ipq_unipcs_raw_clk_determine_rate(struct clk_hw *hw,
+-					     struct clk_rate_request *req)
+-{
+-	switch (req->rate) {
+-	case 125000000:
+-	case 312500000:
+-		return 0;
+-	default:
+-		return -EINVAL;
+-	}
+-}
+-
+-static int ipq_unipcs_raw_clk_set_rate(struct clk_hw *hw,
+-				       unsigned long rate,
+-				       unsigned long parent_rate)
+-{
+-	struct ipq_unipcs_raw_clk *raw_clk = to_unipcs_raw_clk(hw);
+-
+-	switch (rate) {
+-	case 125000000:
+-	case 312500000:
+-		raw_clk->rate = rate;
+-		return 0;
+-	default:
+-		return -EINVAL;
+-	}
+-}
+-
+-static const struct clk_ops ipq_unipcs_raw_clk_ops = {
+-	.recalc_rate = ipq_unipcs_raw_clk_recalc_rate,
+-	.determine_rate = ipq_unipcs_raw_clk_determine_rate,
+-	.set_rate = ipq_unipcs_raw_clk_set_rate,
+-};
+-
+-static u32 ipq_unipcs_reg_read32(struct ipq_uniphy_pcs *qunipcs, u32 reg)
+-{
+-	u32 val;
+-
+-	/* PCS use direct AHB access while XPCS use indirect AHB access */
+-	if (reg >= XPCS_INDIRECT_ADDR) {
+-		/* For XPCS, althrough the register is different for different
+-		 * channels, but they use the same indirect AHB address to
+-		 * access, so add protects here.
+-		 */
+-		spin_lock(&qunipcs->reg_lock);
+-
+-		writel(FIELD_GET(XPCS_INDIRECT_ADDR_H, reg),
+-		       qunipcs->base + XPCS_INDIRECT_AHB_ADDR);
+-		val = readl(qunipcs->base + XPCS_INDIRECT_DATA_ADDR(reg));
+-
+-		spin_unlock(&qunipcs->reg_lock);
+-		return val;
+-	} else {
+-		return readl(qunipcs->base + reg);
+-	}
+-}
+-
+-static void ipq_unipcs_reg_modify32(struct ipq_uniphy_pcs *qunipcs,
+-				    u32 reg, u32 mask, u32 set)
+-{
+-	u32 val;
+-
+-	if (reg >= XPCS_INDIRECT_ADDR) {
+-		spin_lock(&qunipcs->reg_lock);
+-
+-		/* XPCS read */
+-		writel(FIELD_GET(XPCS_INDIRECT_ADDR_H, reg),
+-		       qunipcs->base + XPCS_INDIRECT_AHB_ADDR);
+-		val = readl(qunipcs->base + XPCS_INDIRECT_DATA_ADDR(reg));
+-
+-		val &= ~mask;
+-		val |= set;
+-
+-		/* XPCS write */
+-		writel(val, qunipcs->base + XPCS_INDIRECT_DATA_ADDR(reg));
+-
+-		spin_unlock(&qunipcs->reg_lock);
+-	} else {
+-		val = readl(qunipcs->base + reg);
+-		val &= ~mask;
+-		val |= set;
+-		writel(val, qunipcs->base + reg);
+-	}
+-}
+-
+-static void ipq_unipcs_get_state_sgmii(struct ipq_uniphy_pcs *qunipcs,
+-				       int channel,
+-				       struct phylink_link_state *state)
+-{
+-	u32 val;
+-
+-	val = ipq_unipcs_reg_read32(qunipcs, PCS_CHANNEL_STS(channel));
+-
+-	state->link = !!(val & PCS_CHANNEL_LINK_STS);
+-
+-	if (!state->link)
+-		return;
+-
+-	switch (FIELD_GET(PCS_CHANNEL_STS_SPEED_MASK, val)) {
+-	case PCS_CHANNEL_STS_SPEED_1000:
+-		state->speed = SPEED_1000;
+-		break;
+-	case PCS_CHANNEL_STS_SPEED_100:
+-		state->speed = SPEED_100;
+-		break;
+-	case PCS_CHANNEL_STS_SPEED_10:
+-		state->speed = SPEED_10;
+-		break;
+-	default:
+-		return;
+-	}
+-
+-	if (val & PCS_CHANNEL_STS_DUPLEX_FULL)
+-		state->duplex = DUPLEX_FULL;
+-	else
+-		state->duplex = DUPLEX_HALF;
+-
+-	if (val & PCS_CHANNEL_STS_PAUSE_TX_EN)
+-		state->pause |= MLO_PAUSE_TX;
+-	if (val & PCS_CHANNEL_STS_PAUSE_RX_EN)
+-		state->pause |= MLO_PAUSE_RX;
+-}
+-
+-static void ipq_unipcs_get_state_2500basex(struct ipq_uniphy_pcs *qunipcs,
+-					   int channel,
+-					   struct phylink_link_state *state)
+-{
+-	u32 val;
+-
+-	val = ipq_unipcs_reg_read32(qunipcs, PCS_CHANNEL_STS(channel));
+-
+-	state->link = !!(val & PCS_CHANNEL_LINK_STS);
+-
+-	if (!state->link)
+-		return;
+-
+-	state->speed = SPEED_2500;
+-	state->duplex = DUPLEX_FULL;
+-	state->pause |= MLO_PAUSE_TXRX_MASK;
+-}
+-
+-static void ipq_unipcs_get_state_usxgmii(struct ipq_uniphy_pcs *qunipcs,
+-					 int channel,
+-					 struct phylink_link_state *state)
+-{
+-	u32 val, reg;
+-
+-	reg = (channel == 0) ? XPCS_MII_AN_INTR_STS :
+-		XPCS_CHANNEL_MII_AN_INTR_STS(channel);
+-
+-	val = ipq_unipcs_reg_read32(qunipcs, reg);
+-
+-	state->link = !!(val & XPCS_USXG_AN_LINK_STS);
+-
+-	if (!state->link)
+-		return;
+-
+-	switch (FIELD_GET(XPCS_USXG_AN_SPEED_MASK, val)) {
+-	case XPCS_USXG_AN_SPEED_10000:
+-		state->speed = SPEED_10000;
+-		break;
+-	case XPCS_USXG_AN_SPEED_5000:
+-		state->speed = SPEED_5000;
+-		break;
+-	case XPCS_USXG_AN_SPEED_2500:
+-		state->speed = SPEED_2500;
+-		break;
+-	case XPCS_USXG_AN_SPEED_1000:
+-		state->speed = SPEED_1000;
+-		break;
+-	case XPCS_USXG_AN_SPEED_100:
+-		state->speed = SPEED_100;
+-		break;
+-	case XPCS_USXG_AN_SPEED_10:
+-		state->speed = SPEED_10;
+-		break;
+-	default:
+-		return;
+-	}
+-
+-	if (val & XPCS_USXG_AN_DUPLEX_FULL)
+-		state->duplex = DUPLEX_FULL;
+-	else
+-		state->duplex = DUPLEX_HALF;
+-}
+-
+-static void ipq_unipcs_get_state_10gbaser(struct ipq_uniphy_pcs *qunipcs,
+-					  struct phylink_link_state *state)
+-{
+-	u32 val;
+-
+-	val = ipq_unipcs_reg_read32(qunipcs, XPCS_10GBASER_STS);
+-
+-	state->link = !!(val & XPCS_10GBASER_LINK_STS);
+-
+-	if (!state->link)
+-		return;
+-
+-	state->speed = SPEED_10000;
+-	state->duplex = DUPLEX_FULL;
+-	state->pause |= MLO_PAUSE_TXRX_MASK;
+-}
+-
+-static int ipq_unipcs_config_mode(struct ipq_uniphy_pcs *qunipcs,
+-				  phy_interface_t interface)
+-{
+-	unsigned long rate = 0;
+-	u32 val;
+-	int ret;
+-
+-	/* Assert XPCS reset */
+-	reset_control_assert(qunipcs->reset[XPCS_RESET]);
+-
+-	/* Config PCS interface mode */
+-	switch (interface) {
+-	case PHY_INTERFACE_MODE_SGMII:
+-		rate = 125000000;
+-		/* Select Qualcomm SGMII AN mode */
+-		ipq_unipcs_reg_modify32(qunipcs, PCS_MODE_CTRL,
+-					PCS_MODE_SEL_MASK | PCS_MODE_AN_MODE,
+-					PCS_MODE_SGMII);
+-		ipq_unipcs_reg_modify32(qunipcs, PCS_MISC2,
+-					PCS_MISC2_MODE_MASK,
+-					PCS_MISC2_MODE_SGMII);
+-		break;
+-	case PHY_INTERFACE_MODE_QSGMII:
+-		rate = 125000000;
+-		/* Select Qualcomm SGMII AN mode */
+-		ipq_unipcs_reg_modify32(qunipcs, PCS_MODE_CTRL,
+-					PCS_MODE_SEL_MASK | PCS_MODE_AN_MODE,
+-					PCS_MODE_QSGMII);
+-		break;
+-	case PHY_INTERFACE_MODE_PSGMII:
+-		rate = 125000000;
+-		/* Select Qualcomm SGMII AN mode */
+-		ipq_unipcs_reg_modify32(qunipcs, PCS_MODE_CTRL,
+-					PCS_MODE_SEL_MASK | PCS_MODE_AN_MODE,
+-					PCS_MODE_PSGMII);
+-		break;
+-	case PHY_INTERFACE_MODE_1000BASEX:
+-		rate = 125000000;
+-		ipq_unipcs_reg_modify32(qunipcs, PCS_MODE_CTRL,
+-					PCS_MODE_SEL_MASK |
+-					PCS_MODE_SGMII_CTRL_MASK,
+-					PCS_MODE_SGMII |
+-					PCS_MODE_SGMII_CTRL_1000BASEX);
+-		ipq_unipcs_reg_modify32(qunipcs, PCS_MISC2,
+-					PCS_MISC2_MODE_MASK,
+-					PCS_MISC2_MODE_SGMII);
+-		break;
+-	case PHY_INTERFACE_MODE_2500BASEX:
+-		rate = 312500000;
+-		ipq_unipcs_reg_modify32(qunipcs, PCS_MODE_CTRL,
+-					PCS_MODE_SEL_MASK,
+-					PCS_MODE_SGMII_PLUS);
+-		ipq_unipcs_reg_modify32(qunipcs, PCS_MISC2,
+-					PCS_MISC2_MODE_MASK,
+-					PCS_MISC2_MODE_SGMII_PLUS);
+-
+-		break;
+-	case PHY_INTERFACE_MODE_USXGMII:
+-	case PHY_INTERFACE_MODE_10GBASER:
+-		rate = 312500000;
+-		ipq_unipcs_reg_modify32(qunipcs, PCS_MODE_CTRL,
+-					PCS_MODE_SEL_MASK,
+-					PCS_MODE_XPCS);
+-		break;
+-	case PHY_INTERFACE_MODE_10G_QXGMII:
+-		rate = 312500000;
+-		ipq_unipcs_reg_modify32(qunipcs, PCS_MODE_CTRL,
+-					PCS_MODE_SEL_MASK,
+-					PCS_MODE_XPCS);
+-		ipq_unipcs_reg_modify32(qunipcs, PCS_QP_USXG_OPTION,
+-					PCS_QP_USXG_GMII_SRC_XPCS,
+-					PCS_QP_USXG_GMII_SRC_XPCS);
+-		break;
+-	default:
+-		dev_err(qunipcs->dev,
+-			"interface %s not supported\n", phy_modes(interface));
+-		return -EOPNOTSUPP;
+-	}
+-
+-	/* PCS PLL reset */
+-	ipq_unipcs_reg_modify32(qunipcs, PCS_PLL_RESET, PCS_ANA_SW_RESET, 0);
+-	fsleep(20000);
+-	ipq_unipcs_reg_modify32(qunipcs, PCS_PLL_RESET,
+-				PCS_ANA_SW_RESET, PCS_ANA_SW_RESET);
+-
+-	/* Wait for calibration completion */
+-	ret = read_poll_timeout(ipq_unipcs_reg_read32, val,
+-				val & PCS_CALIBRATION_DONE,
+-				1000, 100000, true,
+-				qunipcs, PCS_CALIBRATION);
+-	if (ret) {
+-		dev_err(qunipcs->dev, "UNIPHY PCS calibration timed-out\n");
+-		return ret;
+-	}
+-
+-	/* Configure raw clock rate */
+-	clk_set_rate(qunipcs->raw_clk[PCS_RAW_RX_CLK].hw.clk, rate);
+-	clk_set_rate(qunipcs->raw_clk[PCS_RAW_TX_CLK].hw.clk, rate);
+-
+-	return 0;
+-}
+-
+-static int ipq_unipcs_config_sgmii(struct ipq_uniphy_pcs *qunipcs,
+-				   int channel,
+-				   unsigned int neg_mode,
+-				   phy_interface_t interface)
+-{
+-	int ret;
+-
+-	/* PCS configurations shared by multi channels should be
+-	 * configured for only once.
+-	 */
+-	if (phy_interface_num_ports(interface) > 1)
+-		mutex_lock(&qunipcs->shared_lock);
+-
+-	if (qunipcs->interface != interface) {
+-		ret = ipq_unipcs_config_mode(qunipcs, interface);
+-		if (ret)
+-			goto err;
+-
+-		qunipcs->interface = interface;
+-	}
+-
+-	if (phy_interface_num_ports(interface) > 1)
+-		mutex_unlock(&qunipcs->shared_lock);
+-
+-	/* In-band autoneg mode is enabled by default for each PCS channel */
+-	if (interface != PHY_INTERFACE_MODE_1000BASEX)
+-		return 0;
+-
+-	/* Force speed mode */
+-	ipq_unipcs_reg_modify32(qunipcs, PCS_CHANNEL_CTRL(channel),
+-				PCS_CHANNEL_FORCE_MODE, PCS_CHANNEL_FORCE_MODE);
+-
+-	return 0;
+-
+-err:
+-	if (phy_interface_num_ports(interface) > 1)
+-		mutex_unlock(&qunipcs->shared_lock);
+-
+-	return ret;
+-}
+-
+-static int ipq_unipcs_config_2500basex(struct ipq_uniphy_pcs *qunipcs,
+-				       phy_interface_t interface)
+-{
+-	int ret;
+-
+-	if (qunipcs->interface != interface) {
+-		ret = ipq_unipcs_config_mode(qunipcs, interface);
+-		if (ret)
+-			return ret;
+-
+-		qunipcs->interface = interface;
+-	}
+-
+-	return 0;
+-}
+-
+-static int ipq_unipcs_config_usxgmii(struct ipq_uniphy_pcs *qunipcs,
+-				     int channel,
+-				     unsigned int neg_mode,
+-				     phy_interface_t interface)
+-{
+-	int ret;
+-	u32 reg;
+-
+-	/* Only in-band autoneg mode is supported currently */
+-	if (neg_mode != PHYLINK_PCS_NEG_INBAND_ENABLED)
+-		return -EOPNOTSUPP;
+-
+-	if (interface == PHY_INTERFACE_MODE_10G_QXGMII)
+-		mutex_lock(&qunipcs->shared_lock);
+-
+-	if (qunipcs->interface != interface) {
+-		ret = ipq_unipcs_config_mode(qunipcs, interface);
+-		if (ret)
+-			goto err;
+-
+-		/* Deassert XPCS and configure XPCS USXGMII or 10G_QXGMII */
+-		reset_control_deassert(qunipcs->reset[XPCS_RESET]);
+-
+-		ipq_unipcs_reg_modify32(qunipcs, XPCS_DIG_CTRL,
+-					XPCS_USXG_EN, XPCS_USXG_EN);
+-
+-		if (interface == PHY_INTERFACE_MODE_10G_QXGMII) {
+-			ipq_unipcs_reg_modify32(qunipcs, XPCS_KR_CTRL,
+-						XPCS_USXG_MODE_MASK,
+-						XPCS_10G_QXGMII_MODE);
+-
+-			/* Set Alignment Marker Interval */
+-			ipq_unipcs_reg_modify32(qunipcs, XPCS_DIG_STS,
+-						XPCS_DIG_STS_AM_COUNT,
+-						0x6018);
+-
+-			ipq_unipcs_reg_modify32(qunipcs, XPCS_DIG_CTRL,
+-						XPCS_SOFT_RESET,
+-						XPCS_SOFT_RESET);
+-		}
+-
+-		qunipcs->interface = interface;
+-	}
+-
+-	if (interface == PHY_INTERFACE_MODE_10G_QXGMII)
+-		mutex_unlock(&qunipcs->shared_lock);
+-
+-	/* Disable Tx IPG check for 10G_QXGMII */
+-	if (interface == PHY_INTERFACE_MODE_10G_QXGMII) {
+-		reg = (channel == 0) ? XPCS_XAUI_MODE_CTRL :
+-			XPCS_CHANNEL_XAUI_MODE_CTRL(channel);
+-
+-		ipq_unipcs_reg_modify32(qunipcs, reg,
+-					XPCS_TX_IPG_CHECK_DIS,
+-					XPCS_TX_IPG_CHECK_DIS);
+-	}
+-
+-	/* Enable autoneg */
+-	reg = (channel == 0) ? XPCS_MII_AN_CTRL :
+-		XPCS_CHANNEL_MII_AN_CTRL(channel);
+-
+-	ipq_unipcs_reg_modify32(qunipcs, reg,
+-				XPCS_MII_AN_8BIT, XPCS_MII_AN_8BIT);
+-
+-	reg = (channel == 0) ? XPCS_MII_CTRL :
+-		XPCS_CHANNEL_MII_CTRL(channel);
+-
+-	ipq_unipcs_reg_modify32(qunipcs, reg,
+-				XPCS_MII_AN_EN, XPCS_MII_AN_EN);
+-
+-	return 0;
+-
+-err:
+-	if (interface == PHY_INTERFACE_MODE_10G_QXGMII)
+-		mutex_unlock(&qunipcs->shared_lock);
+-
+-	return ret;
+-}
+-
+-static int ipq_unipcs_config_10gbaser(struct ipq_uniphy_pcs *qunipcs,
+-				      phy_interface_t interface)
+-{
+-	int ret;
+-
+-	if (qunipcs->interface != interface) {
+-		ret = ipq_unipcs_config_mode(qunipcs, interface);
+-		if (ret)
+-			return ret;
+-
+-		/* Deassert XPCS */
+-		reset_control_deassert(qunipcs->reset[XPCS_RESET]);
+-
+-		qunipcs->interface = interface;
+-	}
+-
+-	return 0;
+-}
+-
+-static unsigned long ipq_unipcs_clock_rate_get_gmii(int speed)
+-{
+-	unsigned long rate = 0;
+-
+-	switch (speed) {
+-	case SPEED_1000:
+-		rate = 125000000;
+-		break;
+-	case SPEED_100:
+-		rate = 25000000;
+-		break;
+-	case SPEED_10:
+-		rate = 2500000;
+-		break;
+-	default:
+-		break;
+-	}
+-
+-	return rate;
+-}
+-
+-static unsigned long ipq_unipcs_clock_rate_get_gmiiplus(int speed)
+-{
+-	unsigned long rate = 0;
+-
+-	switch (speed) {
+-	case SPEED_2500:
+-		rate = 312500000;
+-		break;
+-	default:
+-		break;
+-	}
+-
+-	return rate;
+-}
+-
+-static unsigned long ipq_unipcs_clock_rate_get_xgmii(int speed)
+-{
+-	unsigned long rate = 0;
+-
+-	switch (speed) {
+-	case SPEED_10000:
+-		rate = 312500000;
+-		break;
+-	case SPEED_5000:
+-		rate = 156250000;
+-		break;
+-	case SPEED_2500:
+-		rate = 78125000;
+-		break;
+-	case SPEED_1000:
+-		rate = 125000000;
+-		break;
+-	case SPEED_100:
+-		rate = 12500000;
+-		break;
+-	case SPEED_10:
+-		rate = 1250000;
+-		break;
+-	default:
+-		break;
+-	}
+-
+-	return rate;
+-}
+-
+-static void
+-ipq_unipcs_link_up_clock_rate_set(struct ipq_uniphy_pcs_ch *qunipcs_ch,
+-				  phy_interface_t interface,
+-				  int speed)
+-{
+-	struct ipq_uniphy_pcs *qunipcs = qunipcs_ch->qunipcs;
+-	unsigned long rate = 0;
+-
+-	switch (interface) {
+-	case PHY_INTERFACE_MODE_SGMII:
+-	case PHY_INTERFACE_MODE_QSGMII:
+-	case PHY_INTERFACE_MODE_PSGMII:
+-	case PHY_INTERFACE_MODE_1000BASEX:
+-		rate = ipq_unipcs_clock_rate_get_gmii(speed);
+-		break;
+-	case PHY_INTERFACE_MODE_2500BASEX:
+-		rate = ipq_unipcs_clock_rate_get_gmiiplus(speed);
+-		break;
+-	case PHY_INTERFACE_MODE_USXGMII:
+-	case PHY_INTERFACE_MODE_10GBASER:
+-	case PHY_INTERFACE_MODE_10G_QXGMII:
+-		rate = ipq_unipcs_clock_rate_get_xgmii(speed);
+-		break;
+-	default:
+-		dev_err(qunipcs->dev,
+-			"interface %s not supported\n", phy_modes(interface));
+-		return;
+-	}
+-
+-	if (rate == 0) {
+-		dev_err(qunipcs->dev, "Invalid PCS clock rate\n");
+-		return;
+-	}
+-
+-	clk_set_rate(qunipcs_ch->clk[PCS_CH_RX_CLK], rate);
+-	clk_set_rate(qunipcs_ch->clk[PCS_CH_TX_CLK], rate);
+-	fsleep(10000);
+-}
+-
+-static void ipq_unipcs_link_up_config_sgmii(struct ipq_uniphy_pcs *qunipcs,
+-					    int channel,
+-					    unsigned int neg_mode,
+-					    int speed,
+-					    phy_interface_t interface)
+-{
+-	/* No need to config PCS speed if in-band autoneg is enabled */
+-	if (interface != PHY_INTERFACE_MODE_1000BASEX)
+-		goto pcs_adapter_reset;
+-
+-	/* PCS speed set for force mode */
+-	switch (speed) {
+-	case SPEED_1000:
+-		ipq_unipcs_reg_modify32(qunipcs, PCS_CHANNEL_CTRL(channel),
+-					PCS_CHANNEL_SPEED_MASK,
+-					PCS_CHANNEL_SPEED_1000);
+-		break;
+-	case SPEED_100:
+-		ipq_unipcs_reg_modify32(qunipcs, PCS_CHANNEL_CTRL(channel),
+-					PCS_CHANNEL_SPEED_MASK,
+-					PCS_CHANNEL_SPEED_100);
+-		break;
+-	case SPEED_10:
+-		ipq_unipcs_reg_modify32(qunipcs, PCS_CHANNEL_CTRL(channel),
+-					PCS_CHANNEL_SPEED_MASK,
+-					PCS_CHANNEL_SPEED_10);
+-		break;
+-	default:
+-		dev_err(qunipcs->dev, "Force speed %d not supported\n", speed);
+-		return;
+-	}
+-
+-pcs_adapter_reset:
+-	/* PCS channel adapter reset */
+-	ipq_unipcs_reg_modify32(qunipcs, PCS_CHANNEL_CTRL(channel),
+-				PCS_CHANNEL_ADPT_RESET,
+-				0);
+-	ipq_unipcs_reg_modify32(qunipcs, PCS_CHANNEL_CTRL(channel),
+-				PCS_CHANNEL_ADPT_RESET,
+-				PCS_CHANNEL_ADPT_RESET);
+-}
+-
+-static void ipq_unipcs_link_up_config_2500basex(struct ipq_uniphy_pcs *qunipcs,
+-						int channel,
+-						int speed)
+-{
+-	/* 2500BASEX do not support autoneg and do not need to
+-	 * configure PCS speed, only reset PCS adapter here.
+-	 */
+-	ipq_unipcs_reg_modify32(qunipcs, PCS_CHANNEL_CTRL(channel),
+-				PCS_CHANNEL_ADPT_RESET,
+-				0);
+-	ipq_unipcs_reg_modify32(qunipcs, PCS_CHANNEL_CTRL(channel),
+-				PCS_CHANNEL_ADPT_RESET,
+-				PCS_CHANNEL_ADPT_RESET);
+-}
+-
+-static void ipq_unipcs_link_up_config_usxgmii(struct ipq_uniphy_pcs *qunipcs,
+-					      int channel,
+-					      int speed)
+-{
+-	u32 val, reg;
+-
+-	switch (speed) {
+-	case SPEED_10000:
+-		val = XPCS_SPEED_10000;
+-		break;
+-	case SPEED_5000:
+-		val = XPCS_SPEED_5000;
+-		break;
+-	case SPEED_2500:
+-		val = XPCS_SPEED_2500;
+-		break;
+-	case SPEED_1000:
+-		val = XPCS_SPEED_1000;
+-		break;
+-	case SPEED_100:
+-		val = XPCS_SPEED_100;
+-		break;
+-	case SPEED_10:
+-		val = XPCS_SPEED_10;
+-		break;
+-	default:
+-		return;
+-	}
+-
+-	/* USXGMII only support full duplex mode */
+-	val |= XPCS_DUPLEX_FULL;
+-
+-	/* Config XPCS speed */
+-	reg = (channel == 0) ? XPCS_MII_CTRL : XPCS_CHANNEL_MII_CTRL(channel);
+-	ipq_unipcs_reg_modify32(qunipcs, reg,
+-				XPCS_SPEED_MASK | XPCS_DUPLEX_FULL,
+-				val);
+-
+-	/* XPCS adapter reset */
+-	if (channel == 0)
+-		ipq_unipcs_reg_modify32(qunipcs, XPCS_DIG_CTRL,
+-					XPCS_USXG_ADPT_RESET,
+-					XPCS_USXG_ADPT_RESET);
+-	else
+-		ipq_unipcs_reg_modify32(qunipcs, XPCS_CHANNEL_DIG_CTRL(channel),
+-					XPCS_CHANNEL_USXG_ADPT_RESET,
+-					XPCS_CHANNEL_USXG_ADPT_RESET);
+-}
+-
+-static int ipq_unipcs_validate(struct phylink_pcs *pcs,
+-			       unsigned long *supported,
+-			       const struct phylink_link_state *state)
+-{
+-	/* In-band autoneg is not supported for 2500BASEX */
+-	if (state->interface == PHY_INTERFACE_MODE_2500BASEX)
+-		phylink_clear(supported, Autoneg);
+-
+-	return 0;
+-}
+-
+-static void ipq_unipcs_get_state(struct phylink_pcs *pcs,
+-				 struct phylink_link_state *state)
+-{
+-	struct ipq_uniphy_pcs_ch *qunipcs_ch = phylink_pcs_to_unipcs(pcs);
+-	struct ipq_uniphy_pcs *qunipcs = qunipcs_ch->qunipcs;
+-	int channel = qunipcs_ch->channel;
+-
+-	switch (state->interface) {
+-	case PHY_INTERFACE_MODE_SGMII:
+-	case PHY_INTERFACE_MODE_QSGMII:
+-	case PHY_INTERFACE_MODE_PSGMII:
+-	case PHY_INTERFACE_MODE_1000BASEX:
+-		/* SGMII and 1000BASEX in-band autoneg word format are decoded
+-		 * by PCS hardware and both placed to the same status register.
+-		 */
+-		ipq_unipcs_get_state_sgmii(qunipcs, channel, state);
+-		break;
+-	case PHY_INTERFACE_MODE_2500BASEX:
+-		ipq_unipcs_get_state_2500basex(qunipcs, channel, state);
+-		break;
+-	case PHY_INTERFACE_MODE_USXGMII:
+-	case PHY_INTERFACE_MODE_10G_QXGMII:
+-		ipq_unipcs_get_state_usxgmii(qunipcs, channel, state);
+-		break;
+-	case PHY_INTERFACE_MODE_10GBASER:
+-		ipq_unipcs_get_state_10gbaser(qunipcs, state);
+-		break;
+-	default:
+-		break;
+-	}
+-
+-	dev_dbg(qunipcs->dev,
+-		"mode=%s/%s/%s link=%u\n",
+-		phy_modes(state->interface),
+-		phy_speed_to_str(state->speed),
+-		phy_duplex_to_str(state->duplex),
+-		state->link);
+-}
+-
+-static int ipq_unipcs_config(struct phylink_pcs *pcs,
+-			     unsigned int neg_mode,
+-			     phy_interface_t interface,
+-			     const unsigned long *advertising,
+-			     bool permit)
+-{
+-	struct ipq_uniphy_pcs_ch *qunipcs_ch = phylink_pcs_to_unipcs(pcs);
+-	struct ipq_uniphy_pcs *qunipcs = qunipcs_ch->qunipcs;
+-	int channel = qunipcs_ch->channel;
+-
+-	switch (interface) {
+-	case PHY_INTERFACE_MODE_SGMII:
+-	case PHY_INTERFACE_MODE_QSGMII:
+-	case PHY_INTERFACE_MODE_PSGMII:
+-	case PHY_INTERFACE_MODE_1000BASEX:
+-		return ipq_unipcs_config_sgmii(qunipcs, channel,
+-					       neg_mode, interface);
+-	case PHY_INTERFACE_MODE_2500BASEX:
+-		return ipq_unipcs_config_2500basex(qunipcs, interface);
+-	case PHY_INTERFACE_MODE_USXGMII:
+-	case PHY_INTERFACE_MODE_10G_QXGMII:
+-		return ipq_unipcs_config_usxgmii(qunipcs, channel,
+-						 neg_mode, interface);
+-	case PHY_INTERFACE_MODE_10GBASER:
+-		return ipq_unipcs_config_10gbaser(qunipcs, interface);
+-	default:
+-		dev_err(qunipcs->dev,
+-			"interface %s not supported\n", phy_modes(interface));
+-		return -EOPNOTSUPP;
+-	};
+-}
+-
+-static void qcom_ipq_unipcs_an_restart(struct phylink_pcs *pcs)
+-{
+-	/* Currently not used */
+-}
+-
+-static void ipq_unipcs_link_up(struct phylink_pcs *pcs,
+-			       unsigned int neg_mode,
+-			       phy_interface_t interface,
+-			       int speed, int duplex)
+-{
+-	struct ipq_uniphy_pcs_ch *qunipcs_ch = phylink_pcs_to_unipcs(pcs);
+-	struct ipq_uniphy_pcs *qunipcs = qunipcs_ch->qunipcs;
+-	int channel = qunipcs_ch->channel;
+-
+-	/* Configure PCS channel interface clock rate */
+-	ipq_unipcs_link_up_clock_rate_set(qunipcs_ch, interface, speed);
+-
+-	/* Configure PCS speed and reset PCS adapter */
+-	switch (interface) {
+-	case PHY_INTERFACE_MODE_SGMII:
+-	case PHY_INTERFACE_MODE_QSGMII:
+-	case PHY_INTERFACE_MODE_PSGMII:
+-	case PHY_INTERFACE_MODE_1000BASEX:
+-		ipq_unipcs_link_up_config_sgmii(qunipcs, channel,
+-						neg_mode, speed, interface);
+-		break;
+-	case PHY_INTERFACE_MODE_2500BASEX:
+-		ipq_unipcs_link_up_config_2500basex(qunipcs,
+-						    channel, speed);
+-		break;
+-	case PHY_INTERFACE_MODE_USXGMII:
+-	case PHY_INTERFACE_MODE_10G_QXGMII:
+-		ipq_unipcs_link_up_config_usxgmii(qunipcs, channel, speed);
+-		break;
+-	case PHY_INTERFACE_MODE_10GBASER:
+-		break;
+-	default:
+-		dev_err(qunipcs->dev,
+-			"interface %s not supported\n", phy_modes(interface));
+-		break;
+-	}
+-}
+-
+-static const struct phylink_pcs_ops ipq_unipcs_phylink_ops = {
+-	.pcs_validate = ipq_unipcs_validate,
+-	.pcs_get_state = ipq_unipcs_get_state,
+-	.pcs_config = ipq_unipcs_config,
+-	.pcs_an_restart = qcom_ipq_unipcs_an_restart,
+-	.pcs_link_up = ipq_unipcs_link_up,
+-};
+-
+-/**
+- * ipq_unipcs_create() - Create Qualcomm IPQ UNIPHY PCS
+- * @np: Device tree node to the PCS
+- *
+- * Description: Create a phylink PCS instance for a PCS node @np.
+- *
+- * Return: A pointer to the phylink PCS instance or an error-pointer value.
+- */
+-struct phylink_pcs *ipq_unipcs_create(struct device_node *np)
+-{
+-	struct ipq_uniphy_pcs_ch *qunipcs_ch;
+-	struct ipq_uniphy_pcs *qunipcs;
+-	struct device_node *uniphy_np;
+-	struct platform_device *pdev;
+-	u32 channel;
+-	int i, j;
+-
+-	if (!of_device_is_available(np))
+-		return ERR_PTR(-ENODEV);
+-
+-	if (of_property_read_u32(np, "reg", &channel))
+-		return ERR_PTR(-EINVAL);
+-
+-	if (channel >= PCS_MAX_CHANNELS)
+-		return ERR_PTR(-EINVAL);
+-
+-	uniphy_np = of_get_parent(np);
+-	if (!uniphy_np)
+-		return ERR_PTR(-ENODEV);
+-
+-	if (!of_device_is_available(uniphy_np)) {
+-		of_node_put(uniphy_np);
+-		return ERR_PTR(-ENODEV);
+-	}
+-
+-	pdev = of_find_device_by_node(uniphy_np);
+-	of_node_put(uniphy_np);
+-	if (!pdev)
+-		return ERR_PTR(-ENODEV);
+-
+-	qunipcs = platform_get_drvdata(pdev);
+-	platform_device_put(pdev);
+-
+-	/* If probe is not yet completed, return DEFER to
+-	 * the dependent driver.
+-	 */
+-	if (!qunipcs)
+-		return ERR_PTR(-EPROBE_DEFER);
+-
+-	qunipcs_ch = kzalloc(sizeof(*qunipcs_ch), GFP_KERNEL);
+-	if (!qunipcs_ch)
+-		return ERR_PTR(-ENOMEM);
+-
+-	qunipcs_ch->qunipcs = qunipcs;
+-	qunipcs_ch->channel = channel;
+-	qunipcs_ch->pcs.ops = &ipq_unipcs_phylink_ops;
+-	qunipcs_ch->pcs.neg_mode = true;
+-	qunipcs_ch->pcs.poll = true;
+-
+-	for (i = 0; i < PCS_CH_CLK_MAX; i++) {
+-		qunipcs_ch->clk[i] = of_clk_get_by_name(np,
+-							pcs_ch_clock_name[i]);
+-		if (IS_ERR(qunipcs_ch->clk[i])) {
+-			dev_err(qunipcs->dev,
+-				"Failed to get PCS channel %d clock ID %s\n",
+-				channel, pcs_ch_clock_name[i]);
+-			goto free_pcs;
+-		}
+-
+-		clk_prepare_enable(qunipcs_ch->clk[i]);
+-	}
+-
+-	return &qunipcs_ch->pcs;
+-
+-free_pcs:
+-	for (j = 0; j < i; j++) {
+-		clk_disable_unprepare(qunipcs_ch->clk[j]);
+-		clk_put(qunipcs_ch->clk[j]);
+-	}
+-
+-	kfree(qunipcs_ch);
+-	return ERR_PTR(-ENODEV);
+-}
+-EXPORT_SYMBOL(ipq_unipcs_create);
+-
+-/**
+- * ipq_unipcs_destroy() - Destroy Qualcomm IPQ UNIPHY PCS
+- * @pcs: PCS instance
+- *
+- * Description: Destroy a phylink PCS instance.
+- */
+-void ipq_unipcs_destroy(struct phylink_pcs *pcs)
+-{
+-	struct ipq_uniphy_pcs_ch *qunipcs_ch;
+-	int i;
+-
+-	if (!pcs)
+-		return;
+-
+-	qunipcs_ch = phylink_pcs_to_unipcs(pcs);
+-
+-	for (i = 0; i < PCS_CH_CLK_MAX; i++) {
+-		clk_disable_unprepare(qunipcs_ch->clk[i]);
+-		clk_put(qunipcs_ch->clk[i]);
+-	}
+-
+-	kfree(qunipcs_ch);
+-}
+-EXPORT_SYMBOL(ipq_unipcs_destroy);
+-
+-static int ipq_uniphy_clk_register(struct ipq_uniphy_pcs *qunipcs)
+-{
+-	struct ipq_unipcs_raw_clk *raw_clk;
+-	struct device *dev = qunipcs->dev;
+-	struct clk_hw_onecell_data *data;
+-
+-	struct clk_init_data init = { };
+-	int i, ret;
+-
+-	data = devm_kzalloc(dev,
+-			    struct_size(data, hws, PCS_RAW_CLK_MAX),
+-			    GFP_KERNEL);
+-	if (!data)
+-		return -ENOMEM;
+-
+-	data->num = PCS_RAW_CLK_MAX;
+-	for (i = 0; i < PCS_RAW_CLK_MAX; i++) {
+-		ret = of_property_read_string_index(dev->of_node,
+-						    "clock-output-names",
+-						    i, &init.name);
+-		if (ret) {
+-			dev_err(dev,
+-				"%pOFn: No clock-output-names\n", dev->of_node);
+-			return ret;
+-		}
+-
+-		init.ops = &ipq_unipcs_raw_clk_ops;
+-		raw_clk = &qunipcs->raw_clk[i];
+-
+-		raw_clk->rate = 125000000;
+-		raw_clk->hw.init = &init;
+-
+-		ret = devm_clk_hw_register(dev, &raw_clk->hw);
+-		if (ret) {
+-			dev_err(dev, "Failed to register UNIPHY PCS raw clock\n");
+-			return ret;
+-		}
+-
+-		data->hws[i] = &raw_clk->hw;
+-	}
+-
+-	return devm_of_clk_add_hw_provider(dev, of_clk_hw_onecell_get, data);
+-}
+-
+-static int ipq_uniphy_probe(struct platform_device *pdev)
+-{
+-	struct device *dev = &pdev->dev;
+-	struct ipq_uniphy_pcs *priv;
+-	int i, ret;
+-
+-	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+-	if (!priv)
+-		return -ENOMEM;
+-
+-	priv->dev = dev;
+-
+-	priv->base = devm_platform_ioremap_resource(pdev, 0);
+-	if (IS_ERR(priv->base))
+-		return PTR_ERR(priv->base);
+-
+-	for (i = 0; i < PCS_CLK_MAX; i++) {
+-		priv->clk[i] = devm_clk_get_optional_enabled(dev,
+-							     pcs_clock_name[i]);
+-
+-		if (IS_ERR(priv->clk[i])) {
+-			dev_err(dev, "Failed to get the clock ID %s\n",
+-				pcs_clock_name[i]);
+-			return PTR_ERR(priv->clk[i]);
+-		}
+-	}
+-
+-	for (i = 0; i < PCS_RESET_MAX; i++) {
+-		priv->reset[i] =
+-			devm_reset_control_get_optional_exclusive(dev,
+-								  pcs_reset_name[i]);
+-
+-		if (IS_ERR(priv->reset[i]))
+-			dev_err(dev, "Failed to get the reset ID %s\n",
+-				pcs_reset_name[i]);
+-	}
+-
+-	/* Set UNIPHY PCS system and AHB clock rate */
+-	clk_set_rate(priv->clk[PCS_SYS_CLK], 24000000);
+-	clk_set_rate(priv->clk[PCS_AHB_CLK], 100000000);
+-
+-	ret = ipq_uniphy_clk_register(priv);
+-	if (ret)
+-		return ret;
+-
+-	mutex_init(&priv->shared_lock);
+-	spin_lock_init(&priv->reg_lock);
+-
+-	platform_set_drvdata(pdev, priv);
+-
+-	return 0;
+-}
+-
+-static const struct of_device_id ipq_uniphy_of_mtable[] = {
+-	{ .compatible = "qcom,ipq5332-uniphy" },
+-	{ .compatible = "qcom,ipq9574-uniphy" },
+-	{ /* sentinel */ },
+-};
+-MODULE_DEVICE_TABLE(of, ipq_uniphy_of_mtable);
+-
+-static struct platform_driver ipq_uniphy_driver = {
+-	.driver = {
+-		.name = "ipq_uniphy",
+-		.of_match_table = ipq_uniphy_of_mtable,
+-	},
+-	.probe = ipq_uniphy_probe,
+-};
+-module_platform_driver(ipq_uniphy_driver);
+-
+-MODULE_LICENSE("GPL");
+-MODULE_DESCRIPTION("Qualcomm IPQ UNIPHY PCS driver");
+-MODULE_AUTHOR("Lei Wei <quic_leiwei@quicinc.com>");
+diff --git a/drivers/net/pcs/pcs-qcom-ipq9574.c b/drivers/net/pcs/pcs-qcom-ipq9574.c
+new file mode 100644
+index 000000000..9af7668a7
+--- /dev/null
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -0,0 +1,868 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
++ */
++
++#include <linux/clk.h>
++#include <linux/clk-provider.h>
++#include <linux/device.h>
++#include <linux/of.h>
++#include <linux/of_platform.h>
++#include <linux/pcs/pcs-qcom-ipq9574.h>
++#include <linux/phy.h>
++#include <linux/phylink.h>
++#include <linux/platform_device.h>
++#include <linux/regmap.h>
++
++#include <dt-bindings/net/qcom,ipq9574-pcs.h>
++
++/* Maximum number of MIIs per PCS instance. There are 5 MIIs for PSGMII. */
++#define PCS_MAX_MII_NRS			5
++
++#define PCS_CALIBRATION			0x1e0
++#define PCS_CALIBRATION_DONE		BIT(7)
++
++#define PCS_MODE_CTRL			0x46c
++#define PCS_MODE_SEL_MASK		GENMASK(12, 8)
++#define PCS_MODE_SGMII			FIELD_PREP(PCS_MODE_SEL_MASK, 0x4)
++#define PCS_MODE_QSGMII			FIELD_PREP(PCS_MODE_SEL_MASK, 0x1)
++#define PCS_MODE_XPCS			FIELD_PREP(PCS_MODE_SEL_MASK, 0x10)
++
++#define PCS_MII_CTRL(x)			(0x480 + 0x18 * (x))
++#define PCS_MII_ADPT_RESET		BIT(11)
++#define PCS_MII_FORCE_MODE		BIT(3)
++#define PCS_MII_SPEED_MASK		GENMASK(2, 1)
++#define PCS_MII_SPEED_1000		FIELD_PREP(PCS_MII_SPEED_MASK, 0x2)
++#define PCS_MII_SPEED_100		FIELD_PREP(PCS_MII_SPEED_MASK, 0x1)
++#define PCS_MII_SPEED_10		FIELD_PREP(PCS_MII_SPEED_MASK, 0x0)
++
++#define PCS_MII_STS(x)			(0x488 + 0x18 * (x))
++#define PCS_MII_LINK_STS		BIT(7)
++#define PCS_MII_STS_DUPLEX_FULL		BIT(6)
++#define PCS_MII_STS_SPEED_MASK		GENMASK(5, 4)
++#define PCS_MII_STS_SPEED_10		0
++#define PCS_MII_STS_SPEED_100		1
++#define PCS_MII_STS_SPEED_1000		2
++
++#define PCS_PLL_RESET			0x780
++#define PCS_ANA_SW_RESET		BIT(6)
++
++#define XPCS_INDIRECT_ADDR		0x8000
++#define XPCS_INDIRECT_AHB_ADDR		0x83fc
++#define XPCS_INDIRECT_ADDR_H		GENMASK(20, 8)
++#define XPCS_INDIRECT_ADDR_L		GENMASK(7, 0)
++#define XPCS_INDIRECT_DATA_ADDR(reg)	(FIELD_PREP(GENMASK(15, 10), 0x20) | \
++					 FIELD_PREP(GENMASK(9, 2), \
++					 FIELD_GET(XPCS_INDIRECT_ADDR_L, reg)))
++
++#define XPCS_DIG_CTRL			0x38000
++#define XPCS_USXG_ADPT_RESET		BIT(10)
++#define XPCS_USXG_EN			BIT(9)
++
++#define XPCS_MII_CTRL			0x1f0000
++#define XPCS_MII_AN_EN			BIT(12)
++#define XPCS_DUPLEX_FULL		BIT(8)
++#define XPCS_SPEED_MASK			(BIT(13) | BIT(6) | BIT(5))
++#define XPCS_SPEED_10000		(BIT(13) | BIT(6))
++#define XPCS_SPEED_5000			(BIT(13) | BIT(5))
++#define XPCS_SPEED_2500			BIT(5)
++#define XPCS_SPEED_1000			BIT(6)
++#define XPCS_SPEED_100			BIT(13)
++#define XPCS_SPEED_10			0
++
++#define XPCS_MII_AN_CTRL		0x1f8001
++#define XPCS_MII_AN_8BIT		BIT(8)
++
++#define XPCS_MII_AN_INTR_STS		0x1f8002
++#define XPCS_USXG_AN_LINK_STS		BIT(14)
++#define XPCS_USXG_AN_SPEED_MASK		GENMASK(12, 10)
++#define XPCS_USXG_AN_SPEED_10		0
++#define XPCS_USXG_AN_SPEED_100		1
++#define XPCS_USXG_AN_SPEED_1000		2
++#define XPCS_USXG_AN_SPEED_2500		4
++#define XPCS_USXG_AN_SPEED_5000		5
++#define XPCS_USXG_AN_SPEED_10000	3
++
++/* Per PCS MII private data */
++struct ipq_pcs_mii {
++	struct ipq_pcs *qpcs;
++	struct phylink_pcs pcs;
++	int index;
++
++	/* RX clock from NSSCC to PCS MII */
++	struct clk *rx_clk;
++	/* TX clock from NSSCC to PCS MII */
++	struct clk *tx_clk;
++};
++
++/* PCS private data */
++struct ipq_pcs {
++	struct device *dev;
++	void __iomem *base;
++	struct regmap *regmap;
++	phy_interface_t interface;
++
++	/* RX clock supplied to NSSCC */
++	struct clk_hw rx_hw;
++	/* TX clock supplied to NSSCC */
++	struct clk_hw tx_hw;
++
++	struct ipq_pcs_mii *qpcs_mii[PCS_MAX_MII_NRS];
++};
++
++#define phylink_pcs_to_qpcs_mii(_pcs)	\
++	container_of(_pcs, struct ipq_pcs_mii, pcs)
++
++static void ipq_pcs_get_state_sgmii(struct ipq_pcs *qpcs,
++				    int index,
++				    struct phylink_link_state *state)
++{
++	unsigned int val;
++	int ret;
++
++	ret = regmap_read(qpcs->regmap, PCS_MII_STS(index), &val);
++	if (ret) {
++		state->link = 0;
++		return;
++	}
++
++	state->link = !!(val & PCS_MII_LINK_STS);
++
++	if (!state->link)
++		return;
++
++	switch (FIELD_GET(PCS_MII_STS_SPEED_MASK, val)) {
++	case PCS_MII_STS_SPEED_1000:
++		state->speed = SPEED_1000;
++		break;
++	case PCS_MII_STS_SPEED_100:
++		state->speed = SPEED_100;
++		break;
++	case PCS_MII_STS_SPEED_10:
++		state->speed = SPEED_10;
++		break;
++	default:
++		state->link = false;
++		return;
++	}
++
++	if (val & PCS_MII_STS_DUPLEX_FULL)
++		state->duplex = DUPLEX_FULL;
++	else
++		state->duplex = DUPLEX_HALF;
++}
++
++static void ipq_pcs_get_state_usxgmii(struct ipq_pcs *qpcs,
++				      struct phylink_link_state *state)
++{
++	unsigned int val;
++	int ret;
++
++	ret = regmap_read(qpcs->regmap, XPCS_MII_AN_INTR_STS, &val);
++	if (ret) {
++		state->link = 0;
++		return;
++	}
++
++	state->link = !!(val & XPCS_USXG_AN_LINK_STS);
++
++	if (!state->link)
++		return;
++
++	switch (FIELD_GET(XPCS_USXG_AN_SPEED_MASK, val)) {
++	case XPCS_USXG_AN_SPEED_10000:
++		state->speed = SPEED_10000;
++		break;
++	case XPCS_USXG_AN_SPEED_5000:
++		state->speed = SPEED_5000;
++		break;
++	case XPCS_USXG_AN_SPEED_2500:
++		state->speed = SPEED_2500;
++		break;
++	case XPCS_USXG_AN_SPEED_1000:
++		state->speed = SPEED_1000;
++		break;
++	case XPCS_USXG_AN_SPEED_100:
++		state->speed = SPEED_100;
++		break;
++	case XPCS_USXG_AN_SPEED_10:
++		state->speed = SPEED_10;
++		break;
++	default:
++		state->link = false;
++		return;
++	}
++
++	state->duplex = DUPLEX_FULL;
++}
++
++static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
++			       phy_interface_t interface)
++{
++	unsigned long rate = 125000000;
++	unsigned int val;
++	int ret;
++
++	/* Configure PCS interface mode */
++	switch (interface) {
++	case PHY_INTERFACE_MODE_SGMII:
++		val = PCS_MODE_SGMII;
++		break;
++	case PHY_INTERFACE_MODE_QSGMII:
++		val = PCS_MODE_QSGMII;
++		break;
++	case PHY_INTERFACE_MODE_USXGMII:
++		val = PCS_MODE_XPCS;
++		rate = 312500000;
++		break;
++	default:
++		return -EOPNOTSUPP;
++	}
++
++	ret = regmap_update_bits(qpcs->regmap, PCS_MODE_CTRL,
++				 PCS_MODE_SEL_MASK, val);
++	if (ret)
++		return ret;
++
++	/* PCS PLL reset */
++	ret = regmap_clear_bits(qpcs->regmap, PCS_PLL_RESET, PCS_ANA_SW_RESET);
++	if (ret)
++		return ret;
++
++	fsleep(1000);
++	ret = regmap_set_bits(qpcs->regmap, PCS_PLL_RESET, PCS_ANA_SW_RESET);
++	if (ret)
++		return ret;
++
++	/* Wait for calibration completion */
++	ret = regmap_read_poll_timeout(qpcs->regmap, PCS_CALIBRATION,
++				       val, val & PCS_CALIBRATION_DONE,
++				       1000, 100000);
++	if (ret) {
++		dev_err(qpcs->dev, "PCS calibration timed-out\n");
++		return ret;
++	}
++
++	qpcs->interface = interface;
++
++	/* Configure the RX and TX clock to NSSCC as 125M or 312.5M based
++	 * on current interface mode.
++	 */
++	ret = clk_set_rate(qpcs->rx_hw.clk, rate);
++	if (ret) {
++		dev_err(qpcs->dev, "Failed to set RX clock rate\n");
++		return ret;
++	}
++
++	ret = clk_set_rate(qpcs->tx_hw.clk, rate);
++	if (ret) {
++		dev_err(qpcs->dev, "Failed to set TX clock rate\n");
++		return ret;
++	}
++
++	return 0;
++}
++
++static int ipq_pcs_config_sgmii(struct ipq_pcs *qpcs,
++				int index,
++				unsigned int neg_mode,
++				phy_interface_t interface)
++{
++	int ret;
++
++	/* Configure the PCS mode if required */
++	if (qpcs->interface != interface) {
++		ret = ipq_pcs_config_mode(qpcs, interface);
++		if (ret)
++			return ret;
++	}
++
++	/* Set AN mode or force mode */
++	if (neg_mode == PHYLINK_PCS_NEG_INBAND_ENABLED)
++		return regmap_clear_bits(qpcs->regmap,
++					 PCS_MII_CTRL(index), PCS_MII_FORCE_MODE);
++	else
++		return regmap_set_bits(qpcs->regmap,
++				       PCS_MII_CTRL(index), PCS_MII_FORCE_MODE);
++}
++
++static int ipq_pcs_config_usxgmii(struct ipq_pcs *qpcs)
++{
++	int ret;
++
++	/* Configure the XPCS for USXGMII mode if required */
++	if (qpcs->interface == PHY_INTERFACE_MODE_USXGMII)
++		return 0;
++
++	ret = ipq_pcs_config_mode(qpcs, PHY_INTERFACE_MODE_USXGMII);
++	if (ret)
++		return ret;
++
++	ret = regmap_set_bits(qpcs->regmap, XPCS_DIG_CTRL, XPCS_USXG_EN);
++	if (ret)
++		return ret;
++
++	ret = regmap_set_bits(qpcs->regmap, XPCS_MII_AN_CTRL, XPCS_MII_AN_8BIT);
++	if (ret)
++		return ret;
++
++	return regmap_set_bits(qpcs->regmap, XPCS_MII_CTRL, XPCS_MII_AN_EN);
++}
++
++static int ipq_pcs_link_up_config_sgmii(struct ipq_pcs *qpcs,
++					int index,
++					unsigned int neg_mode,
++					int speed)
++{
++	unsigned int val;
++	int ret;
++
++	/* PCS speed need not be configured if in-band autoneg is enabled */
++	if (neg_mode != PHYLINK_PCS_NEG_INBAND_ENABLED) {
++		/* PCS speed set for force mode */
++		switch (speed) {
++		case SPEED_1000:
++			val = PCS_MII_SPEED_1000;
++			break;
++		case SPEED_100:
++			val = PCS_MII_SPEED_100;
++			break;
++		case SPEED_10:
++			val = PCS_MII_SPEED_10;
++			break;
++		default:
++			dev_err(qpcs->dev, "Invalid SGMII speed %d\n", speed);
++			return -EINVAL;
++		}
++
++		ret = regmap_update_bits(qpcs->regmap, PCS_MII_CTRL(index),
++					 PCS_MII_SPEED_MASK, val);
++		if (ret)
++			return ret;
++	}
++
++	/* PCS adapter reset */
++	ret = regmap_clear_bits(qpcs->regmap,
++				PCS_MII_CTRL(index), PCS_MII_ADPT_RESET);
++	if (ret)
++		return ret;
++
++	return regmap_set_bits(qpcs->regmap,
++			       PCS_MII_CTRL(index), PCS_MII_ADPT_RESET);
++}
++
++static int ipq_pcs_link_up_config_usxgmii(struct ipq_pcs *qpcs, int speed)
++{
++	unsigned int val;
++	int ret;
++
++	switch (speed) {
++	case SPEED_10000:
++		val = XPCS_SPEED_10000;
++		break;
++	case SPEED_5000:
++		val = XPCS_SPEED_5000;
++		break;
++	case SPEED_2500:
++		val = XPCS_SPEED_2500;
++		break;
++	case SPEED_1000:
++		val = XPCS_SPEED_1000;
++		break;
++	case SPEED_100:
++		val = XPCS_SPEED_100;
++		break;
++	case SPEED_10:
++		val = XPCS_SPEED_10;
++		break;
++	default:
++		dev_err(qpcs->dev, "Invalid USXGMII speed %d\n", speed);
++		return -EINVAL;
++	}
++
++	/* Configure XPCS speed */
++	ret = regmap_update_bits(qpcs->regmap, XPCS_MII_CTRL,
++				 XPCS_SPEED_MASK, val | XPCS_DUPLEX_FULL);
++	if (ret)
++		return ret;
++
++	/* XPCS adapter reset */
++	return regmap_set_bits(qpcs->regmap,
++			       XPCS_DIG_CTRL, XPCS_USXG_ADPT_RESET);
++}
++
++static int ipq_pcs_validate(struct phylink_pcs *pcs, unsigned long *supported,
++			    const struct phylink_link_state *state)
++{
++	switch (state->interface) {
++	case PHY_INTERFACE_MODE_SGMII:
++	case PHY_INTERFACE_MODE_QSGMII:
++		return 0;
++	case PHY_INTERFACE_MODE_USXGMII:
++		/* USXGMII only supports full duplex mode */
++		phylink_clear(supported, 100baseT_Half);
++		phylink_clear(supported, 10baseT_Half);
++		return 0;
++	default:
++		return -EINVAL;
++	}
++}
++
++static int ipq_pcs_enable(struct phylink_pcs *pcs)
++{
++	struct ipq_pcs_mii *qpcs_mii = phylink_pcs_to_qpcs_mii(pcs);
++	struct ipq_pcs *qpcs = qpcs_mii->qpcs;
++	int index = qpcs_mii->index;
++	int ret;
++
++	ret = clk_prepare_enable(qpcs_mii->rx_clk);
++	if (ret) {
++		dev_err(qpcs->dev, "Failed to enable MII %d RX clock\n", index);
++		return ret;
++	}
++
++	ret = clk_prepare_enable(qpcs_mii->tx_clk);
++	if (ret) {
++		/* This is a fatal event since phylink does not support unwinding
++		 * the state back for this error. So, we only report the error
++		 * and do not disable the clocks.
++		 */
++		dev_err(qpcs->dev, "Failed to enable MII %d TX clock\n", index);
++		return ret;
++	}
++
++	return 0;
++}
++
++static void ipq_pcs_disable(struct phylink_pcs *pcs)
++{
++	struct ipq_pcs_mii *qpcs_mii = phylink_pcs_to_qpcs_mii(pcs);
++
++	clk_disable_unprepare(qpcs_mii->rx_clk);
++	clk_disable_unprepare(qpcs_mii->tx_clk);
++}
++
++static void ipq_pcs_get_state(struct phylink_pcs *pcs,
++			      struct phylink_link_state *state)
++{
++	struct ipq_pcs_mii *qpcs_mii = phylink_pcs_to_qpcs_mii(pcs);
++	struct ipq_pcs *qpcs = qpcs_mii->qpcs;
++	int index = qpcs_mii->index;
++
++	switch (state->interface) {
++	case PHY_INTERFACE_MODE_SGMII:
++	case PHY_INTERFACE_MODE_QSGMII:
++		ipq_pcs_get_state_sgmii(qpcs, index, state);
++		break;
++	case PHY_INTERFACE_MODE_USXGMII:
++		ipq_pcs_get_state_usxgmii(qpcs, state);
++		break;
++	default:
++		break;
++	}
++
++	dev_dbg_ratelimited(qpcs->dev,
++			    "mode=%s/%s/%s link=%u\n",
++			    phy_modes(state->interface),
++			    phy_speed_to_str(state->speed),
++			    phy_duplex_to_str(state->duplex),
++			    state->link);
++}
++
++static int ipq_pcs_config(struct phylink_pcs *pcs,
++			  unsigned int neg_mode,
++			  phy_interface_t interface,
++			  const unsigned long *advertising,
++			  bool permit)
++{
++	struct ipq_pcs_mii *qpcs_mii = phylink_pcs_to_qpcs_mii(pcs);
++	struct ipq_pcs *qpcs = qpcs_mii->qpcs;
++	int index = qpcs_mii->index;
++
++	switch (interface) {
++	case PHY_INTERFACE_MODE_SGMII:
++	case PHY_INTERFACE_MODE_QSGMII:
++		return ipq_pcs_config_sgmii(qpcs, index, neg_mode, interface);
++	case PHY_INTERFACE_MODE_USXGMII:
++		return ipq_pcs_config_usxgmii(qpcs);
++	default:
++		return -EOPNOTSUPP;
++	};
++}
++
++static void ipq_pcs_link_up(struct phylink_pcs *pcs,
++			    unsigned int neg_mode,
++			    phy_interface_t interface,
++			    int speed, int duplex)
++{
++	struct ipq_pcs_mii *qpcs_mii = phylink_pcs_to_qpcs_mii(pcs);
++	struct ipq_pcs *qpcs = qpcs_mii->qpcs;
++	int index = qpcs_mii->index;
++	int ret;
++
++	switch (interface) {
++	case PHY_INTERFACE_MODE_SGMII:
++	case PHY_INTERFACE_MODE_QSGMII:
++		ret = ipq_pcs_link_up_config_sgmii(qpcs, index,
++						   neg_mode, speed);
++		break;
++	case PHY_INTERFACE_MODE_USXGMII:
++		ret = ipq_pcs_link_up_config_usxgmii(qpcs, speed);
++		break;
++	default:
++		return;
++	}
++
++	if (ret)
++		dev_err(qpcs->dev, "PCS link up fail for interface %s\n",
++			phy_modes(interface));
++}
++
++static const struct phylink_pcs_ops ipq_pcs_phylink_ops = {
++	.pcs_validate = ipq_pcs_validate,
++	.pcs_enable = ipq_pcs_enable,
++	.pcs_disable = ipq_pcs_disable,
++	.pcs_get_state = ipq_pcs_get_state,
++	.pcs_config = ipq_pcs_config,
++	.pcs_link_up = ipq_pcs_link_up,
++};
++
++/* Parse the PCS MII DT nodes which are child nodes of the PCS node,
++ * and instantiate each MII PCS instance.
++ */
++static int ipq_pcs_create_miis(struct ipq_pcs *qpcs)
++{
++	struct device *dev = qpcs->dev;
++	struct ipq_pcs_mii *qpcs_mii;
++	struct device_node *mii_np;
++	u32 index;
++	int ret;
++
++	for_each_available_child_of_node(dev->of_node, mii_np) {
++		ret = of_property_read_u32(mii_np, "reg", &index);
++		if (ret) {
++			dev_err(dev, "Failed to read MII index\n");
++			of_node_put(mii_np);
++			return ret;
++		}
++
++		if (index >= PCS_MAX_MII_NRS) {
++			dev_err(dev, "Invalid MII index\n");
++			of_node_put(mii_np);
++			return -EINVAL;
++		}
++
++		qpcs_mii = devm_kzalloc(dev, sizeof(*qpcs_mii), GFP_KERNEL);
++		if (!qpcs_mii) {
++			of_node_put(mii_np);
++			return -ENOMEM;
++		}
++
++		qpcs_mii->qpcs = qpcs;
++		qpcs_mii->index = index;
++		qpcs_mii->pcs.ops = &ipq_pcs_phylink_ops;
++		qpcs_mii->pcs.neg_mode = true;
++		qpcs_mii->pcs.poll = true;
++
++		qpcs_mii->rx_clk = devm_get_clk_from_child(dev, mii_np, "rx");
++		if (IS_ERR(qpcs_mii->rx_clk)) {
++			of_node_put(mii_np);
++			return dev_err_probe(dev, PTR_ERR(qpcs_mii->rx_clk),
++					     "Failed to get MII %d RX clock\n", index);
++		}
++
++		qpcs_mii->tx_clk = devm_get_clk_from_child(dev, mii_np, "tx");
++		if (IS_ERR(qpcs_mii->tx_clk)) {
++			of_node_put(mii_np);
++			return dev_err_probe(dev, PTR_ERR(qpcs_mii->tx_clk),
++					     "Failed to get MII %d TX clock\n", index);
++		}
++
++		qpcs->qpcs_mii[index] = qpcs_mii;
++	}
++
++	return 0;
++}
++
++static unsigned long ipq_pcs_clk_rate_get(struct ipq_pcs *qpcs)
++{
++	switch (qpcs->interface) {
++	case PHY_INTERFACE_MODE_USXGMII:
++		return 312500000;
++	default:
++		return 125000000;
++	}
++}
++
++/* Return clock rate for the RX clock supplied to NSSCC
++ * as per the interface mode.
++ */
++static unsigned long ipq_pcs_rx_clk_recalc_rate(struct clk_hw *hw,
++						unsigned long parent_rate)
++{
++	struct ipq_pcs *qpcs = container_of(hw, struct ipq_pcs, rx_hw);
++
++	return ipq_pcs_clk_rate_get(qpcs);
++}
++
++/* Return clock rate for the TX clock supplied to NSSCC
++ * as per the interface mode.
++ */
++static unsigned long ipq_pcs_tx_clk_recalc_rate(struct clk_hw *hw,
++						unsigned long parent_rate)
++{
++	struct ipq_pcs *qpcs = container_of(hw, struct ipq_pcs, tx_hw);
++
++	return ipq_pcs_clk_rate_get(qpcs);
++}
++
++static int ipq_pcs_clk_determine_rate(struct clk_hw *hw,
++				      struct clk_rate_request *req)
++{
++	switch (req->rate) {
++	case 125000000:
++	case 312500000:
++		return 0;
++	default:
++		return -EINVAL;
++	}
++}
++
++/* Clock ops for the RX clock supplied to NSSCC */
++static const struct clk_ops ipq_pcs_rx_clk_ops = {
++	.determine_rate = ipq_pcs_clk_determine_rate,
++	.recalc_rate = ipq_pcs_rx_clk_recalc_rate,
++};
++
++/* Clock ops for the TX clock supplied to NSSCC */
++static const struct clk_ops ipq_pcs_tx_clk_ops = {
++	.determine_rate = ipq_pcs_clk_determine_rate,
++	.recalc_rate = ipq_pcs_tx_clk_recalc_rate,
++};
++
++static struct clk_hw *ipq_pcs_clk_hw_get(struct of_phandle_args *clkspec,
++					 void *data)
++{
++	struct ipq_pcs *qpcs = data;
++
++	switch (clkspec->args[0]) {
++	case PCS_RX_CLK:
++		return &qpcs->rx_hw;
++	case PCS_TX_CLK:
++		return &qpcs->tx_hw;
++	}
++
++	return ERR_PTR(-EINVAL);
++}
++
++/* Register the RX and TX clock which are output from SerDes to
++ * the NSSCC. The NSSCC driver assigns the RX and TX clock as
++ * parent, divides them to generate the MII RX and TX clock to
++ * each MII interface of the PCS as per the link speeds and
++ * interface modes.
++ */
++static int ipq_pcs_clk_register(struct ipq_pcs *qpcs)
++{
++	struct clk_init_data init = { };
++	int ret;
++
++	init.ops = &ipq_pcs_rx_clk_ops;
++	init.name = devm_kasprintf(qpcs->dev, GFP_KERNEL, "%s::rx_clk",
++				   dev_name(qpcs->dev));
++	if (!init.name)
++		return -ENOMEM;
++
++	qpcs->rx_hw.init = &init;
++	ret = devm_clk_hw_register(qpcs->dev, &qpcs->rx_hw);
++	if (ret)
++		return ret;
++
++	init.ops = &ipq_pcs_tx_clk_ops;
++	init.name = devm_kasprintf(qpcs->dev, GFP_KERNEL, "%s::tx_clk",
++				   dev_name(qpcs->dev));
++	if (!init.name)
++		return -ENOMEM;
++
++	qpcs->tx_hw.init = &init;
++	ret = devm_clk_hw_register(qpcs->dev, &qpcs->tx_hw);
++	if (ret)
++		return ret;
++
++	return devm_of_clk_add_hw_provider(qpcs->dev, ipq_pcs_clk_hw_get, qpcs);
++}
++
++static int ipq_pcs_regmap_read(void *context, unsigned int reg,
++			       unsigned int *val)
++{
++	struct ipq_pcs *qpcs = context;
++
++	/* PCS uses direct AHB access while XPCS uses indirect AHB access */
++	if (reg >= XPCS_INDIRECT_ADDR) {
++		writel(FIELD_GET(XPCS_INDIRECT_ADDR_H, reg),
++		       qpcs->base + XPCS_INDIRECT_AHB_ADDR);
++		*val = readl(qpcs->base + XPCS_INDIRECT_DATA_ADDR(reg));
++	} else {
++		*val = readl(qpcs->base + reg);
++	}
++
++	return 0;
++}
++
++static int ipq_pcs_regmap_write(void *context, unsigned int reg,
++				unsigned int val)
++{
++	struct ipq_pcs *qpcs = context;
++
++	/* PCS uses direct AHB access while XPCS uses indirect AHB access */
++	if (reg >= XPCS_INDIRECT_ADDR) {
++		writel(FIELD_GET(XPCS_INDIRECT_ADDR_H, reg),
++		       qpcs->base + XPCS_INDIRECT_AHB_ADDR);
++		writel(val, qpcs->base + XPCS_INDIRECT_DATA_ADDR(reg));
++	} else {
++		writel(val, qpcs->base + reg);
++	}
++
++	return 0;
++}
++
++static const struct regmap_config ipq_pcs_regmap_cfg = {
++	.reg_bits = 32,
++	.val_bits = 32,
++	.reg_read = ipq_pcs_regmap_read,
++	.reg_write = ipq_pcs_regmap_write,
++	.fast_io = true,
++};
++
++static int ipq9574_pcs_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct ipq_pcs *qpcs;
++	struct clk *clk;
++	int ret;
++
++	qpcs = devm_kzalloc(dev, sizeof(*qpcs), GFP_KERNEL);
++	if (!qpcs)
++		return -ENOMEM;
++
++	qpcs->dev = dev;
++
++	qpcs->base = devm_platform_ioremap_resource(pdev, 0);
++	if (IS_ERR(qpcs->base))
++		return dev_err_probe(dev, PTR_ERR(qpcs->base),
++				     "Failed to ioremap resource\n");
++
++	qpcs->regmap = devm_regmap_init(dev, NULL, qpcs, &ipq_pcs_regmap_cfg);
++	if (IS_ERR(qpcs->regmap))
++		return dev_err_probe(dev, PTR_ERR(qpcs->regmap),
++				     "Failed to allocate register map\n");
++
++	clk = devm_clk_get_enabled(dev, "sys");
++	if (IS_ERR(clk))
++		return dev_err_probe(dev, PTR_ERR(clk),
++				     "Failed to enable SYS clock\n");
++
++	clk = devm_clk_get_enabled(dev, "ahb");
++	if (IS_ERR(clk))
++		return dev_err_probe(dev, PTR_ERR(clk),
++				     "Failed to enable AHB clock\n");
++
++	ret = ipq_pcs_clk_register(qpcs);
++	if (ret)
++		return ret;
++
++	ret = ipq_pcs_create_miis(qpcs);
++	if (ret)
++		return ret;
++
++	platform_set_drvdata(pdev, qpcs);
++
++	return 0;
++}
++
++static const struct of_device_id ipq9574_pcs_of_mtable[] = {
++	{ .compatible = "qcom,ipq9574-pcs" },
++	{ /* sentinel */ },
++};
++MODULE_DEVICE_TABLE(of, ipq9574_pcs_of_mtable);
++
++/**
++ * ipq_pcs_get() - Get the IPQ PCS MII instance
++ * @np: Device tree node to the PCS MII
++ *
++ * Description: Get the phylink PCS instance for the given PCS MII node @np.
++ * This instance is associated with the specific MII of the PCS and the
++ * corresponding Ethernet netdevice.
++ *
++ * Return: A pointer to the phylink PCS instance or an error-pointer value.
++ */
++struct phylink_pcs *ipq_pcs_get(struct device_node *np)
++{
++	struct platform_device *pdev;
++	struct ipq_pcs_mii *qpcs_mii;
++	struct ipq_pcs *qpcs;
++	u32 index;
++
++	if (of_property_read_u32(np, "reg", &index))
++		return ERR_PTR(-EINVAL);
++
++	if (index >= PCS_MAX_MII_NRS)
++		return ERR_PTR(-EINVAL);
++
++	if (!of_match_node(ipq9574_pcs_of_mtable, np->parent))
++		return ERR_PTR(-EINVAL);
++
++	/* Get the parent device */
++	pdev = of_find_device_by_node(np->parent);
++	if (!pdev)
++		return ERR_PTR(-ENODEV);
++
++	qpcs = platform_get_drvdata(pdev);
++	if (!qpcs) {
++		put_device(&pdev->dev);
++
++		/* If probe is not yet completed, return DEFER to
++		 * the dependent driver.
++		 */
++		return ERR_PTR(-EPROBE_DEFER);
++	}
++
++	qpcs_mii = qpcs->qpcs_mii[index];
++	if (!qpcs_mii) {
++		put_device(&pdev->dev);
++		return ERR_PTR(-ENOENT);
++	}
++
++	return &qpcs_mii->pcs;
++}
++EXPORT_SYMBOL(ipq_pcs_get);
++
++/**
++ * ipq_pcs_put() - Release the IPQ PCS MII instance
++ * @pcs: PCS instance
++ *
++ * Description: Release a phylink PCS instance.
++ */
++void ipq_pcs_put(struct phylink_pcs *pcs)
++{
++	struct ipq_pcs_mii *qpcs_mii = phylink_pcs_to_qpcs_mii(pcs);
++
++	/* Put reference taken by of_find_device_by_node() in
++	 * ipq_pcs_get().
++	 */
++	put_device(qpcs_mii->qpcs->dev);
++}
++EXPORT_SYMBOL(ipq_pcs_put);
++
++static struct platform_driver ipq9574_pcs_driver = {
++	.driver = {
++		.name = "ipq9574_pcs",
++		.suppress_bind_attrs = true,
++		.of_match_table = ipq9574_pcs_of_mtable,
++	},
++	.probe = ipq9574_pcs_probe,
++};
++module_platform_driver(ipq9574_pcs_driver);
++
++MODULE_LICENSE("GPL");
++MODULE_DESCRIPTION("Qualcomm IPQ9574 PCS driver");
++MODULE_AUTHOR("Lei Wei <quic_leiwei@quicinc.com>");
+diff --git a/include/dt-bindings/net/qcom,ipq9574-pcs.h b/include/dt-bindings/net/qcom,ipq9574-pcs.h
+new file mode 100644
+index 000000000..96bd036aa
+--- /dev/null
++++ b/include/dt-bindings/net/qcom,ipq9574-pcs.h
+@@ -0,0 +1,15 @@
++/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
++/*
++ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
++ *
++ * Device Tree constants for the Qualcomm IPQ9574 PCS
++ */
++
++#ifndef _DT_BINDINGS_PCS_QCOM_IPQ9574_H
++#define _DT_BINDINGS_PCS_QCOM_IPQ9574_H
++
++/* The RX and TX clocks which are provided from the SerDes to NSSCC. */
++#define PCS_RX_CLK		0
++#define PCS_TX_CLK		1
++
++#endif /* _DT_BINDINGS_PCS_QCOM_IPQ9574_H */
+diff --git a/include/linux/pcs/pcs-qcom-ipq-uniphy.h b/include/linux/pcs/pcs-qcom-ipq-uniphy.h
+deleted file mode 100644
+index 4a617bcb3..000000000
+--- a/include/linux/pcs/pcs-qcom-ipq-uniphy.h
++++ /dev/null
+@@ -1,13 +0,0 @@
+-/* SPDX-License-Identifier: GPL-2.0-only */
+-/*
+- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+- *
+- */
+-
+-#ifndef __LINUX_PCS_QCOM_IPQ_UNIPHY_H
+-#define __LINUX_PCS_QCOM_IPQ_UNIPHY_H
+-
+-struct phylink_pcs *ipq_unipcs_create(struct device_node *np);
+-void ipq_unipcs_destroy(struct phylink_pcs *pcs);
+-
+-#endif /* __LINUX_PCS_QCOM_IPQ_UNIPHY_H */
+diff --git a/include/linux/pcs/pcs-qcom-ipq9574.h b/include/linux/pcs/pcs-qcom-ipq9574.h
+new file mode 100644
+index 000000000..8daff8fa5
+--- /dev/null
++++ b/include/linux/pcs/pcs-qcom-ipq9574.h
+@@ -0,0 +1,15 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++/*
++ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
++ */
++
++#ifndef __LINUX_PCS_QCOM_IPQ9574_H
++#define __LINUX_PCS_QCOM_IPQ9574_H
++
++struct device_node;
++struct phylink_pcs;
++
++struct phylink_pcs *ipq_pcs_get(struct device_node *np);
++void ipq_pcs_put(struct phylink_pcs *pcs);
++
++#endif /* __LINUX_PCS_QCOM_IPQ9574_H */
+-- 
+2.34.1
+

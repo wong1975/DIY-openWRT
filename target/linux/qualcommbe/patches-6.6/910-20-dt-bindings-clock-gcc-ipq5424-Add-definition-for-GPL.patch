@@ -1,0 +1,38 @@
+From c567747311238cd88fcd27662614dd6c1b26f57d Mon Sep 17 00:00:00 2001
+From: Luo Jie <quic_luoj@quicinc.com>
+Date: Wed, 12 Feb 2025 13:14:35 +0800
+Subject: [PATCH 20/44] dt-bindings: clock: gcc-ipq5424: Add definition for
+ GPLL0_OUT_AUX
+
+The GCC clock GPLL0_OUT_AUX is one of source clocks for NSS clock
+controller.
+
+Change-Id: Id82061494c87c6082cc9414fe9253fee77291790
+Signed-off-by: Luo Jie <quic_luoj@quicinc.com>
+---
+ include/dt-bindings/clock/qcom,ipq5424-gcc.h | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/include/dt-bindings/clock/qcom,ipq5424-gcc.h b/include/dt-bindings/clock/qcom,ipq5424-gcc.h
+index cad46811b..5e05f0b4d 100644
+--- a/include/dt-bindings/clock/qcom,ipq5424-gcc.h
++++ b/include/dt-bindings/clock/qcom,ipq5424-gcc.h
+@@ -1,7 +1,7 @@
+ /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
+ /*
+  * Copyright (c) 2018,2020 The Linux Foundation. All rights reserved.
+- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
++ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+  */
+ 
+ #ifndef _DT_BINDINGS_CLOCK_IPQ_GCC_IPQ5424_H
+@@ -153,5 +153,6 @@
+ #define GCC_PCIE3_RCHNG_CLK			143
+ #define GCC_IM_SLEEP_CLK			144
+ #define GCC_XO_CLK				145
++#define GPLL0_OUT_AUX				146
+ 
+ #endif
+-- 
+2.34.1
+
