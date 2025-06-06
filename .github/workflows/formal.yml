@@ -12,5 +12,13 @@ jobs:
     name: Test Formalities
     uses: openwrt/actions-shared-workflows/.github/workflows/formal.yml@main
     
-    with:
-      config-path: .config
+  post-build:
+    runs-on: ubuntu-latest
+    needs: build  # 确保 build 任务完成后才执行
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure `.config` is correctly placed
+        run: |
+          cp .config .config
