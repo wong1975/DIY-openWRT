@@ -19,6 +19,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Ensure `.config` is correctly placed
-        run: |
-          cp .config .config
+      #- name: Ensure `.config` is correctly placed
+      #  run: |
+      #    cp .config .config
