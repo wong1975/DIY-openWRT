@@ -24,7 +24,7 @@ jobs:
       #    cp .config .config
 
       - name: Upload OpenWrt firmware
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: OpenWrt-Firmware
           path: bin/targets/
