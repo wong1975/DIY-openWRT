@@ -1,6 +1,7 @@
 name: Test Formalities
 
 on:
+  workflow_dispatch:
   pull_request:
 
 permissions:
@@ -10,3 +11,6 @@ jobs:
   build:
     name: Test Formalities
     uses: openwrt/actions-shared-workflows/.github/workflows/formal.yml@main
+    
+    with:
+      config-path: .config
