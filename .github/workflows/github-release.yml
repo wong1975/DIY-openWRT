@@ -25,8 +25,18 @@ jobs:
       - name: Build OpenWRT firmware
         run: |
           # 这里替换为你自己的 OpenWRT 编译命令
-          make defconfig
-          make -j$(nproc)
+          - name: "多线程编译"
+            cd $GITHUB_WORKSPACE/openwrt
+            echo -e "$(nproc) threads for compilation..."
+            make -j$(nproc)
+          - name: "失败时使用单线程编译"
+            if: failure()
+            run: |
+            cd $GITHUB_WORKSPACE/openwrt
+            make -j1 V=s
+        
+          #make defconfig
+          #make -j$(nproc)
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
